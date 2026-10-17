@@ -296,3 +296,9 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .okmark { color: var(--ok); font-weight: 600; }
 .blank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
 .blank-grid .btn { padding: 8px 0; font: 700 16px var(--f-display); }
+
+/* word list */
+.head-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.lex-btn { font: 500 13px var(--f-mono); padding: 8px 12px; border-radius: 10px; background: var(--surface); }
+.check-line { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.check-line input { accent-color: var(--accent); }

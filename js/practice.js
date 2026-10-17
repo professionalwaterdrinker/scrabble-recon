@@ -7,6 +7,7 @@ const TILES = { A: 9, B: 2, C: 2, D: 4, E: 12, F: 2, G: 3, H: 2, I: 9, J: 1, K: 
 
 export function createPractice(ctx) {
   const { N, CENTER, VAL, PREM, $, escapeHtml, notation, lineRun, isWord, engine, renderBoard, pickBlank } = ctx;
+  const listName = () => (ctx.listName ? ctx.listName() : 'the word list');
   const value = ch => ch === '?' ? 0 : VAL[ch];
 
   let G = null;                 // the saved game
@@ -71,7 +72,7 @@ export function createPractice(ctx) {
     }
     const wordText = w => w.map(i => B[i]).join('');
     const bad = words.map(wordText).filter(w => !isWord(w));
-    if (bad.length) return { ok: false, reason: `${bad.join(', ')} ${bad.length > 1 ? "aren't" : "isn't"} in the word list.` };
+    if (bad.length) return { ok: false, reason: `${bad.join(', ')} ${bad.length > 1 ? "aren't" : "isn't"} in ${listName()}.` };
     let score = 0;
     for (const w of words) {
       let s = 0, mult = 1;

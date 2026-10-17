@@ -25,10 +25,13 @@
       </div>
       <p class="tagline">Photograph a finished Scrabble board and get the game back, move by move.</p>
     </div>
+    <div class="head-tools">
+    <button class="btn lex-btn" id="lexBtn" type="button" title="Choose the word list">Words: ENABLE</button>
     <div class="tabs" role="tablist" aria-label="Mode">
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>
       <button role="tab" id="tab-practice" aria-selected="false">Practice</button>
+    </div>
     </div>
   </header>
 
@@ -213,6 +216,29 @@
     </aside>
   </main>
 </div>
+
+<dialog id="lexDialog" aria-labelledby="lexTitle">
+  <form method="dialog" class="dialog-body" id="lexForm">
+    <h2 id="lexTitle">Word list</h2>
+    <p class="hint">Words are checked against <b id="lexCurrent">ENABLE</b>. This list is used for checking the board, rebuilding games, practice games and Quackle's suggestions.</p>
+    <p class="hint">ENABLE is free and built in, and close to the North American tournament list. To use Collins Scrabble Words (CSW24) or another list, load it from a copy you're entitled to use, as a text file with one word per line (anything after the first word on a line is ignored). The file stays in this browser. It is never uploaded or published.</p>
+    <label class="field" for="lexFile">Word list file
+      <input id="lexFile" type="file" accept=".txt,text/plain">
+    </label>
+    <label class="field" for="lexName">Name
+      <input id="lexName" type="text" placeholder="CSW24" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="check-line"><input type="checkbox" id="lexCollins"> This is a Collins list (Quackle uses its Collins leave values)</label>
+    <p class="status" id="lexStatus" hidden></p>
+    <div class="row">
+      <button class="btn primary" id="lexUse" type="button" disabled>Use this list</button>
+      <button class="btn" id="lexStored" type="button" hidden>Use my saved list</button>
+      <button class="btn" id="lexBuiltin" type="button">Use ENABLE</button>
+      <button class="btn" id="lexForget" type="button" hidden>Forget my list</button>
+      <button class="btn" value="close" type="submit">Close</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="blankDialog" aria-labelledby="blankTitle">
   <form method="dialog" class="dialog-body">

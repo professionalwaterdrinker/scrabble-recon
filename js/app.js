@@ -554,8 +554,25 @@ function qkInput(g, rack) {
   lines.push(`rack ${a.player} ${rack.letters}`, `actual ${a.place} ${a.word}`, 'top 6');
   return lines.join('\n');
 }
-function qkCall(input) {
-  return new Promise(res => { const id = QK.nextId++; QK.pending.set(id, res); QK.worker.postMessage({ type: 'analyse', id, input }); });
+function qkSend(msg) {
+  return new Promise(res => { const id = QK.nextId++; QK.pending.set(id, res); QK.worker.postMessage({ ...msg, id }); });
+}
+// Make sure the engine is using the chosen word list before it analyses anything.
+function qkSyncLexicon() {
+  if (QK.lexApplied === LEX.key) return Promise.resolve();
+  if (QK.lexSyncing && QK.lexSyncing.key === LEX.key) return QK.lexSyncing.promise;
+  const key = LEX.key;
+  const promise = qkSend({ type: 'lexicon', words: LEX.builtin ? null : LEX.words, name: LEX.name, collins: LEX.collins }).then(r => {
+    if (!r.ok) throw new Error(r.error || 'Quackle could not use this word list.');
+    QK.lexApplied = key;
+  }).finally(() => { if (QK.lexSyncing && QK.lexSyncing.key === key) QK.lexSyncing = null; });
+  QK.lexSyncing = { key, promise };
+  return promise;
+}
+async function qkCall(input) {
+  try { await qkSyncLexicon(); }
+  catch (e) { return { ok: false, error: e.message }; }
+  return qkSend({ type: 'analyse', input });
 }
 // Resolves once the engine is ready, loading it if needed.
 function qkReady() {
@@ -805,6 +822,121 @@ $('tab-setup').onclick = () => setMode('setup');
 $('tab-replay').onclick = () => S.moves && setMode('replay');
 $('tab-practice').onclick = () => setMode('practice');
 
+/* ---------- word list ---------- */
+// The built-in ENABLE list, or a list the viewer loads from their own file.
+// A loaded list is kept in this browser's IndexedDB and never leaves the device.
+const LEX = { key: 'enable', name: 'ENABLE', builtin: true, words: null, collins: false };
+let enableText = null, pendingList = null;
+
+function idb() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('tilerewind', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbGet(k) { const db = await idb(); return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function idbSet(k, v) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+async function idbDel(k) { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').delete(k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+
+// One word per line; anything after the first word is ignored (lists often carry definitions).
+function parseWordList(text) {
+  const seen = new Set(); let skipped = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const w = line.trim().split(/\s+/)[0];
+    if (!w) continue;
+    const W = w.toUpperCase();
+    if (/^[A-Z]{2,15}$/.test(W)) seen.add(W); else skipped++;
+  }
+  return { words: [...seen].sort(), skipped };
+}
+
+function applyLexicon(entry) {
+  if (entry) Object.assign(LEX, { key: 'user:' + entry.name + ':' + entry.words.length, name: entry.name, builtin: false, words: entry.words, collins: !!entry.collins });
+  else Object.assign(LEX, { key: 'enable', name: 'ENABLE', builtin: true, words: null, collins: false });
+  const words = LEX.builtin ? enableText.split('\n').filter(Boolean).map(w => w.trim().toUpperCase()) : LEX.words;
+  DICT = new Set(words);
+  worker.postMessage({ type: 'dict', text: LEX.builtin ? enableText : words.join('\n') });
+  $('lexBtn').textContent = `Words: ${LEX.name}`;
+  $('lexCurrent').textContent = LEX.builtin ? 'ENABLE (built in)' : `${LEX.name} (your file, ${words.length.toLocaleString()} words)`;
+  // results from the previous list no longer apply
+  QK.results = {}; QK.token = null;
+  if (S.mode === 'replay' && QK.state === 'ready') qkRunAll();
+  renderChecks(); renderBoard();
+  if (S.mode === 'practice') practice.render();
+}
+async function bootLexicon() {
+  try {
+    const r = await fetch('data/words.txt');
+    if (!r.ok) throw new Error(r.status);
+    enableText = await r.text();
+  } catch (e) {
+    solveStatus('The word list did not load. Reload the page to try again.', 'err');
+    return;
+  }
+  let saved = null;
+  try { saved = await idbGet('wordlist'); } catch (e) {}
+  applyLexicon(saved && saved.active ? saved : null);
+}
+
+const lexStatus = (text, cls = '') => { const s = $('lexStatus'); s.hidden = !text; s.className = 'status ' + cls; s.textContent = text; };
+async function openLexDialog() {
+  let saved = null;
+  try { saved = await idbGet('wordlist'); } catch (e) {}
+  $('lexStored').hidden = !saved || !LEX.builtin;
+  if (saved) $('lexStored').textContent = `Use my saved list (${saved.name})`;
+  $('lexForget').hidden = !saved;
+  $('lexBuiltin').hidden = LEX.builtin;
+  $('lexUse').disabled = !pendingList;
+  lexStatus('');
+  $('lexDialog').showModal();
+}
+$('lexBtn').onclick = openLexDialog;
+$('lexFile').onchange = async e => {
+  const f = e.target.files[0];
+  pendingList = null; $('lexUse').disabled = true;
+  if (!f) return;
+  lexStatus('Reading the file…');
+  try {
+    const { words, skipped } = parseWordList(await f.text());
+    if (words.length < 1000) { lexStatus(`Only ${words.length} words found. Check that the file has one word per line.`, 'err'); return; }
+    pendingList = words;
+    const base = f.name.replace(/\.[^.]+$/, '');
+    if (!$('lexName').value) $('lexName').value = base.toUpperCase().slice(0, 20);
+    $('lexCollins').checked = /csw|collins|sowpods/i.test(base + ' ' + $('lexName').value);
+    lexStatus(`${words.length.toLocaleString()} words found${skipped ? `. ${skipped.toLocaleString()} lines were skipped because they aren't 2 to 15 letters A to Z` : ''}.`, 'good');
+    $('lexUse').disabled = false;
+  } catch (err) {
+    lexStatus('That file could not be read. Choose a plain text file.', 'err');
+  }
+};
+$('lexUse').onclick = async () => {
+  if (!pendingList) return;
+  const entry = { name: ($('lexName').value.trim() || 'My list').slice(0, 20), collins: $('lexCollins').checked, words: pendingList, active: true };
+  try { await idbSet('wordlist', entry); }
+  catch (e) { lexStatus("This browser couldn't save the list, so it will only last until you close the page.", 'err'); }
+  applyLexicon(entry);
+  pendingList = null; $('lexFile').value = '';
+  $('lexDialog').close();
+};
+$('lexStored').onclick = async () => {
+  const saved = await idbGet('wordlist').catch(() => null);
+  if (!saved) return;
+  saved.active = true; await idbSet('wordlist', saved).catch(() => {});
+  applyLexicon(saved); $('lexDialog').close();
+};
+$('lexBuiltin').onclick = async () => {
+  const saved = await idbGet('wordlist').catch(() => null);
+  if (saved) { saved.active = false; await idbSet('wordlist', saved).catch(() => {}); }
+  applyLexicon(null); $('lexDialog').close();
+};
+$('lexForget').onclick = async () => {
+  await idbDel('wordlist').catch(() => {});
+  if (!LEX.builtin) applyLexicon(null);
+  $('lexDialog').close();
+};
+
 /* ---------- practice ---------- */
 // Ask which letter a blank stands for; resolves '' if cancelled.
 function pickBlank() {
@@ -820,6 +952,7 @@ function pickBlank() {
 const practice = createPractice({
   N, CENTER, VAL, PREM, $, escapeHtml, notation, lineRun, renderBoard, pickBlank,
   isWord: w => !DICT || DICT.has(w),
+  listName: () => LEX.name,
   engine: { ready: qkReady, analyse: qkCall, state: () => QK.state },
 });
 $('editBtn').onclick = () => setMode('setup');
@@ -832,13 +965,7 @@ else { setFromRows(SAMPLE); S.isSample = true; }
 S.autoSolve = S.isSample;
 renderChecks(); renderBoard();
 startWorker();
-fetch('data/words.txt').then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(text => {
-  DICT = new Set(text.split('\n').filter(Boolean).map(w => w.trim().toUpperCase()));
-  worker.postMessage({ type: 'dict', text });
-  renderChecks(); renderBoard();
-}).catch(() => {
-  solveStatus('The word list did not load. Reload the page to try again.', 'err');
-});
+bootLexicon();
 renderKeyState();
 try { const m = localStorage.getItem('tilerewind.method'); const el = m && document.querySelector(`input[name="method"][value="${m}"]`); if (el) el.checked = true; } catch (e) {}
 renderMethod();

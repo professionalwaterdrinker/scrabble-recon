@@ -95,6 +95,16 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 
 Analysis is only as reliable as the rack. When the rack includes likely (not certain) tiles, the card says so, and unknown tiles are left out. The engine uses Quackle's quick static evaluation (score plus leave value), not its slower simulation. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
 
+## Word list (ENABLE or your own, such as CSW24)
+
+The built-in word list is ENABLE, a public-domain list close to the North American tournament list. Collins Scrabble Words (CSW24) is copyrighted by HarperCollins, so it isn't included here and must never be committed to this repository.
+
+To play with CSW24 or another list, click **Words: ENABLE** in the header and load the list from a copy you're entitled to use. It needs to be a text file with one word per line; anything after the first word on a line, such as a definition, is ignored. The list then applies everywhere:
+- the board check, the game rebuild and practice games
+- Quackle's suggestions
+
+For Quackle, the app builds a DAWG from your list on your device, which takes a few seconds the first time in a session. A Collins list also loads Quackle's Collins leave values. The list is saved only in that browser (IndexedDB), and is never uploaded or published. **Use ENABLE** switches back, and **Forget my list** deletes it.
+
 ## Practice mode
 
 The **Practice** tab is an untimed game against yourself. It deals two racks from a shuffled 100-tile bag, and you play each rack in turn, while the rack not on turn stays face down.
