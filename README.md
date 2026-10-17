@@ -105,7 +105,17 @@ Static equity (score plus leave value) is quick, but it can't see openings you g
 - **Parallel engines.** Quackle's own simulator runs on threads, which a page hosted on GitHub Pages can't use. Instead, the bridge exposes Quackle's single-playout step (`qk_sim_start` and `qk_sim_step`), and `js/simulate.js` runs several engine workers side by side, one per spare CPU core (up to 4, or 2 on phones). Their results are combined.
 - **Speed.** On an 8-core laptop, a 10-second run reaches about 1,400 playouts per play.
 
-Practice racks are exact. Replay racks may be partly estimated, and the card says so when they are. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
+Practice racks are exact. Replay racks may be partly estimated, and the card says so when they are.
+
+### Memory
+
+Each Quackle engine takes about 110 MB, most of it the dictionary and leave values held in engine memory. To keep that in check:
+
+- **Shared engine.** Simulation borrows the analysis engine as one of its engines.
+- **Idle shutdown.** The extra engines close a minute after a simulation ends.
+- **Released file copies.** Each engine drops its copies of the data files once they're loaded, and fetches them again from the offline cache only when the word list changes.
+
+`mabbleDebug.extraSimEngines()` in the browser console shows how many extra engines are running. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
 
 ## Word list (ENABLE or your own, such as CSW24)
 
