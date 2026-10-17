@@ -144,6 +144,34 @@ int qk_init()
 	return dm->strategyParameters()->hasSuperleaves() ? 1 : 2;
 }
 
+// Switch to a word list the page has written into the virtual file system (a DAWG
+// only: Quackle can find moves without a GADDAG, just more slowly). `lexicon` names
+// it for strategy lookups: names starting "csw" use Quackle's Collins leave values
+// from /data/strategy/csw/ when the page has provided them.
+int qk_use_lexicon(const char *dawgPath, const char *lexicon)
+{
+	if (!dm && qk_init() < 0) return -1;
+	LexiconParameters *lex = dm->lexiconParameters();
+	lex->unloadAll();
+	lex->loadDawg(dawgPath);
+	lex->setLexiconName(lexicon);
+	dm->strategyParameters()->initialize(lexicon);
+	return lex->hasDawg() ? 1 : -1;
+}
+
+// Back to the bundled ENABLE word list.
+int qk_use_builtin()
+{
+	if (!dm) return qk_init();
+	LexiconParameters *lex = dm->lexiconParameters();
+	lex->unloadAll();
+	lex->loadDawg("/data/lexica/enable.dawg");
+	lex->loadGaddag("/data/lexica/enable.gaddag");
+	lex->setLexiconName("enable");
+	dm->strategyParameters()->initialize("enable");
+	return lex->hasDawg() && lex->hasGaddag() ? 1 : -1;
+}
+
 const char *qk_analyse(const char *input)
 {
 	if (!dm && qk_init() < 0) return fail("word list not loaded").c_str();

@@ -55,7 +55,10 @@ em++ -std=c++17 -O2 -DNDEBUG -fexceptions -I"$SRC" "${FILES[@]}" "$HERE/bridge.c
   -o "$OUT/quackle.js" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createQuackle \
   -sENVIRONMENT=web,worker -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=4194304 \
-  -sEXPORTED_FUNCTIONS=_qk_init,_qk_analyse -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
+  -sEXPORTED_FUNCTIONS=_qk_init,_qk_analyse,_qk_use_lexicon,_qk_use_builtin -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,FS \
   --preload-file "$DATA@/data"
+
+# Collins leave values, fetched by the page only when a Collins word list is in use
+cp "$SRC/data/strategy/csw/superleaves" "$OUT/csw-superleaves"
 
 ls -l "$OUT"

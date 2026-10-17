@@ -28,7 +28,8 @@ jobs:
           if git ls-remote --exit-code origin quackle-build > /dev/null; then
             git fetch -q --depth 1 origin quackle-build
             mkdir -p engine
-            git archive FETCH_HEAD quackle.js quackle.wasm quackle.data | tar -x -C engine
+            git archive FETCH_HEAD | tar -x -C engine
+            rm -f engine/README.md
             ls -l engine
           fi
       - uses: actions/configure-pages@v5
