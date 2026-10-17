@@ -4,7 +4,7 @@ name: Build Quackle engine
 # quackle-build branch, so the site's own deploy never depends on it.
 on:
   push:
-    branches: [quackle-poc]
+    branches: [main, quackle-poc]
     paths: ['quackle/**', '.github/workflows/quackle.yml', 'data/words.txt']
   workflow_dispatch:
 
