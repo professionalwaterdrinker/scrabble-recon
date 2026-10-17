@@ -58,7 +58,9 @@ static std::string esc(const std::string &s)
 	return o;
 }
 
-static std::string moveJson(const Move &m)
+// With a position, also explain the equity: the tiles kept, Quackle's value for
+// them, and its board-related adjustment (equity = score + leave value + board).
+static std::string moveJson(const Move &m, GamePosition *pos = nullptr)
 {
 	std::ostringstream o;
 	const LetterString &shown = m.prettyTiles().empty() ? m.tiles() : m.prettyTiles();
@@ -66,7 +68,15 @@ static std::string moveJson(const Move &m)
 	o << "{\"action\":\"" << action << "\",\"place\":\"" << esc(m.positionString()) << "\",\"word\":\""
 	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(shown)) << "\",\"tiles\":\""
 	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(m.tiles())) << "\",\"score\":" << m.effectiveScore()
-	  << ",\"equity\":" << m.equity << ",\"text\":\"" << esc(m.toString()) << "\"}";
+	  << ",\"equity\":" << m.equity << ",\"text\":\"" << esc(m.toString()) << "\"";
+	if (pos)
+	{
+		const Rack leave = pos->currentPlayer().rack() - m;
+		o << ",\"leave\":\"" << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(leave.tiles())) << "\""
+		  << ",\"leaveValue\":" << pos->calculatePlayerConsideration(m)
+		  << ",\"board\":" << pos->calculateSharedConsideration(m);
+	}
+	o << "}";
 	return o.str();
 }
 
@@ -263,7 +273,7 @@ const char *qk_analyse(const char *input)
 	std::ostringstream o;
 	o << "{\"ok\":true,\"rack\":\"" << esc(s.rackText) << "\",\"moves\":[";
 	for (size_t i = 0; i < list.size(); ++i)
-		o << (i ? "," : "") << moveJson(list[i]);
+		o << (i ? "," : "") << moveJson(list[i], &pos);
 	o << "]";
 
 	if (!s.actualPlace.empty())
@@ -273,7 +283,7 @@ const char *qk_analyse(const char *input)
 		int rank = -1;
 		for (size_t i = 0; i < list.size(); ++i)
 			if (list[i] == a) { rank = (int)i; break; }
-		o << ",\"actual\":" << moveJson(a) << ",\"actualRank\":" << rank << ",\"actualValidity\":" << validity;
+		o << ",\"actual\":" << moveJson(a, &pos) << ",\"actualRank\":" << rank << ",\"actualValidity\":" << validity;
 	}
 	o << "}";
 	result = o.str();
@@ -391,6 +401,52 @@ const char *qk_sim_step(int iterations)
 		return fail(std::string("simulation stopped: ") + e.what()).c_str();
 	}
 	result = simJson();
+	return result.c_str();
+}
+
+/* ---------- what the opponent could do next ----------
+ * Plays the "actual" move, then deals the opponent `samples` random racks from
+ * the tiles the mover can't see (everything not on the board and not in the
+ * mover's leave) and asks Quackle for the opponent's best play with each.
+ */
+const char *qk_replies(const char *input, int samples)
+{
+	if (!dm && qk_init() < 0) return fail("word list not loaded").c_str();
+	Game game;
+	Setup s;
+	const std::string error = setupPosition(input, game, s);
+	if (!error.empty()) return fail(error).c_str();
+	if (s.actualPlace.empty()) return fail("no move to look past").c_str();
+
+	GamePosition &before = game.currentPosition();
+	int validity = 0;
+	Move m = actualMove(before, s, &validity);
+	if (validity != GamePosition::ValidMove) return fail("that move isn't legal in this position").c_str();
+	const Rack leave = before.currentPlayer().rack() - m;
+	const int mover = s.rackPlayer, opponent = (s.rackPlayer + 1) % s.playerCount;
+	game.commitMove(m);
+
+	GamePosition &pos = game.currentPosition();
+	emptyRacks(pos, s.playerCount);
+	pos.setPlayerRack(mover, leave, true);   // the mover's own leave is known to them
+	pos.setCurrentPlayer(opponent);
+	if (samples < 1) samples = 1;
+	if (samples > 1000) samples = 1000;
+
+	std::ostringstream o;
+	o << "{\"ok\":true,\"unseen\":" << pos.bag().size() << ",\"replies\":[";
+	for (int k = 0; k < samples; ++k)
+	{
+		Bag pool = pos.bag();
+		Rack rack;
+		pool.refill(rack);   // a random rack from the unseen tiles
+		pos.setPlayerRack(opponent, rack, true);
+		Move best = pos.staticBestMove();
+		pos.setPlayerRack(opponent, Rack(), true);
+		o << (k ? "," : "") << "{\"rack\":\"" << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(rack.tiles())) << "\",\"move\":" << moveJson(best) << "}";
+	}
+	o << "]}";
+	result = o.str();
 	return result.c_str();
 }
 

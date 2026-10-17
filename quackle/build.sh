@@ -55,7 +55,7 @@ em++ -std=c++17 -O2 -DNDEBUG -fexceptions -I"$SRC" "${FILES[@]}" "$HERE/bridge.c
   -o "$OUT/quackle.js" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createQuackle \
   -sENVIRONMENT=web,worker -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=4194304 \
-  -sEXPORTED_FUNCTIONS=_qk_init,_qk_analyse,_qk_use_lexicon,_qk_use_builtin,_qk_sim_start,_qk_sim_step -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,FS
+  -sEXPORTED_FUNCTIONS=_qk_init,_qk_analyse,_qk_use_lexicon,_qk_use_builtin,_qk_sim_start,_qk_sim_step,_qk_replies -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,FS
 
 # The data ships as separate files the page loads itself (not one preloaded bundle),
 # so each engine can release the dictionary files once they're read in.
