@@ -3,6 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # redeploy after the engine is rebuilt, so the site always carries the newest engine
+  workflow_run:
+    workflows: ['Build Quackle engine']
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +21,8 @@ concurrency:
 
 jobs:
   deploy:
+    # after an engine build, only deploy if it succeeded
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

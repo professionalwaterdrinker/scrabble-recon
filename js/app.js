@@ -947,8 +947,14 @@ $('lexForget').onclick = async () => {
 };
 
 /* ---------- simulation ---------- */
-const simulator = createSimulator({ lexicon: () => LEX });
+// The analysis engine doubles as the first simulation engine, so a simulation starts one fewer.
+const simulator = createSimulator({
+  lexicon: () => LEX,
+  shared: { ready: qkReady, call: msg => qkSend(msg), syncLexicon: qkSyncLexicon },
+});
 const SIM_OPTS = { seconds: 30, plies: 2 };
+// read-only diagnostics for checking memory use from the browser console
+window.mabbleDebug = { extraSimEngines: () => simulator.extraEngines(), analysisEngine: () => QK.state };
 // Run a simulation for `holder` (any object; results land in holder.sim), redrawing as it goes.
 async function startSim(holder, input, render) {
   if (holder.sim && holder.sim.running) return;

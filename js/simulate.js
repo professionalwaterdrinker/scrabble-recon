@@ -8,38 +8,59 @@ export function poolSize() {
   return Math.max(1, Math.min(small ? 2 : 4, cores - 1));
 }
 
-export function createSimulator({ lexicon }) {
-  const workers = [];   // { w, pending: Map, nextId, ready: Promise, lexKey }
+// How long extra engines stay loaded after a simulation, in case another follows.
+const IDLE_MS = 60 * 1000;
+
+// `shared` (optional) is the page's analysis engine, borrowed as the first engine:
+// { ready(): Promise, call(msg): Promise, syncLexicon(): Promise }.
+export function createSimulator({ lexicon, shared }) {
+  const own = [];        // extra engines this simulator started
+  let idleTimer = null, busy = false;
 
   function spawn() {
     const w = new Worker(new URL('./quackle-worker.js', import.meta.url), { type: 'module' });
-    const slot = { w, pending: new Map(), nextId: 1, lexKey: null };
-    slot.ready = new Promise((res, rej) => {
+    const pending = new Map();
+    let nextId = 1, lexKey = null;
+    const started = new Promise((res, rej) => {
       w.onmessage = e => {
         const m = e.data;
         if (m.type === 'ready') res();
         else if (m.type === 'error') rej(new Error(m.message));
-        else if (m.type === 'result') { const r = slot.pending.get(m.id); slot.pending.delete(m.id); if (r) r(m.result); }
+        else if (m.type === 'result') { const r = pending.get(m.id); pending.delete(m.id); if (r) r(m.result); }
       };
       w.onerror = () => rej(new Error('An engine could not start.'));
     });
     w.postMessage({ type: 'load' });
-    return slot;
+    const call = msg => new Promise(res => { const id = nextId++; pending.set(id, res); w.postMessage({ ...msg, id }); });
+    return {
+      ready: () => started,
+      call,
+      async syncLexicon() {
+        const lex = lexicon();
+        if (lexKey === lex.key) return;
+        const r = await call({ type: 'lexicon', words: lex.builtin ? null : lex.words, name: lex.name, collins: lex.collins });
+        if (!r.ok) throw new Error(r.error || 'An engine could not use this word list.');
+        lexKey = lex.key;
+      },
+      terminate: () => w.terminate(),
+    };
   }
-  const call = (slot, msg) => new Promise(res => { const id = slot.nextId++; slot.pending.set(id, res); slot.w.postMessage({ ...msg, id }); });
 
-  async function ensure(n, say) {
-    while (workers.length < n) workers.push(spawn());
-    say(`Starting ${n} engine${n > 1 ? 's' : ''}…`);
-    await Promise.all(workers.slice(0, n).map(s => s.ready));
-    const lex = lexicon();
-    await Promise.all(workers.slice(0, n).map(async s => {
-      if (s.lexKey === lex.key) return;
-      if (!lex.builtin) say('Preparing your word list in each engine…');
-      const r = await call(s, { type: 'lexicon', words: lex.builtin ? null : lex.words, name: lex.name, collins: lex.collins });
-      if (!r.ok) throw new Error(r.error || 'An engine could not use this word list.');
-      s.lexKey = lex.key;
-    }));
+  // Close the extra engines (about 150 MB each) once nothing has used them for a while.
+  function scheduleIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (!busy) { own.forEach(s => s.terminate()); own.length = 0; } }, IDLE_MS);
+  }
+
+  async function engines(n, say) {
+    const slots = shared ? [shared] : [];
+    while (slots.length + own.length < n) own.push(spawn());
+    slots.push(...own.slice(0, n - slots.length));
+    say(`Starting ${slots.length} engine${slots.length > 1 ? 's' : ''}…`);
+    await Promise.all(slots.map(s => s.ready()));
+    if (!lexicon().builtin) say('Preparing your word list in each engine…');
+    await Promise.all(slots.map(s => s.syncLexicon()));
+    return slots;
   }
 
   // Combine every engine's running averages, weighting by iterations.
@@ -58,38 +79,46 @@ export function createSimulator({ lexicon }) {
   // input: position in the bridge's text format (with "actual" for the play made).
   // Calls onProgress({ phase, message, elapsed, seconds, result }) as it goes.
   async function run(input, { candidates = 6, plies = 2, seconds = 30, signal, onProgress }) {
-    const say = message => onProgress && onProgress({ phase: 'setup', message });
-    const n = poolSize();
-    await ensure(n, say);
-    if (signal && signal.aborted) return null;
-    const starts = await Promise.all(workers.slice(0, n).map(s => call(s, { type: 'simStart', input, candidates, plies })));
-    const first = starts[0];
-    if (!first.ok) throw new Error(first.error);
-    // every engine sees the same position, so they should list the same candidates; use only those that agree
-    const key = st => st.ok ? st.candidates.map(c => c.text).join('|') : '';
-    const active = workers.slice(0, n).filter((s, k) => key(starts[k]) === key(first));
-    const parts = active.map(() => ({ iterations: 0, moves: first.candidates.map(c => ({ equity: c.equity, win: 0 })) }));
-    const t0 = performance.now(), limit = seconds * 1000;
-    let last = null;
-    await Promise.all(active.map(async (s, k) => {
-      let batch = 4;
-      while (!(signal && signal.aborted) && performance.now() - t0 < limit) {
-        const b0 = performance.now();
-        const r = await call(s, { type: 'simStep', iterations: batch });
-        if (!r.ok) throw new Error(r.error);
-        parts[k] = r;
-        // aim for about a quarter of a second per batch so progress stays lively and Stop is quick
-        const took = performance.now() - b0;
-        batch = Math.max(1, Math.min(200, Math.round(batch * 250 / Math.max(10, took))));
-        last = combine(parts, first.candidates);
-        onProgress && onProgress({ phase: 'running', elapsed: (performance.now() - t0) / 1000, seconds, engines: active.length, result: last });
-      }
-    }));
-    const result = last || combine(parts, first.candidates);
-    return { ...result, actualIndex: first.actualIndex, rack: first.rack, plies, engines: active.length, seconds: (performance.now() - t0) / 1000, stopped: !!(signal && signal.aborted) };
+    // the engines hold one simulation each, so only one can run at a time
+    if (busy) throw new Error('Another simulation is running. Stop it first.');
+    busy = true;
+    clearTimeout(idleTimer);
+    try {
+      const say = message => onProgress && onProgress({ phase: 'setup', message });
+      const slots = await engines(poolSize(), say);
+      if (signal && signal.aborted) return null;
+      const starts = await Promise.all(slots.map(s => s.call({ type: 'simStart', input, candidates, plies })));
+      const first = starts[0];
+      if (!first.ok) throw new Error(first.error);
+      // every engine sees the same position, so they should list the same candidates; use only those that agree
+      const key = st => st.ok ? st.candidates.map(c => c.text).join('|') : '';
+      const active = slots.filter((s, k) => key(starts[k]) === key(first));
+      const parts = active.map(() => ({ iterations: 0, moves: first.candidates.map(c => ({ equity: c.equity, win: 0 })) }));
+      const t0 = performance.now(), limit = seconds * 1000;
+      let last = null;
+      await Promise.all(active.map(async (s, k) => {
+        let batch = 4;
+        while (!(signal && signal.aborted) && performance.now() - t0 < limit) {
+          const b0 = performance.now();
+          const r = await s.call({ type: 'simStep', iterations: batch });
+          if (!r.ok) throw new Error(r.error);
+          parts[k] = r;
+          // aim for about a quarter of a second per batch so progress stays lively and Stop is quick
+          const took = performance.now() - b0;
+          batch = Math.max(1, Math.min(200, Math.round(batch * 250 / Math.max(10, took))));
+          last = combine(parts, first.candidates);
+          onProgress && onProgress({ phase: 'running', elapsed: (performance.now() - t0) / 1000, seconds, engines: active.length, result: last });
+        }
+      }));
+      const result = last || combine(parts, first.candidates);
+      return { ...result, actualIndex: first.actualIndex, rack: first.rack, plies, engines: active.length, seconds: (performance.now() - t0) / 1000, stopped: !!(signal && signal.aborted) };
+    } finally {
+      busy = false;
+      scheduleIdle();
+    }
   }
 
-  return { run, poolSize };
+  return { run, poolSize, extraEngines: () => own.length };
 }
 
 // The simulation section of an analysis card. `sim` is undefined (not run yet),

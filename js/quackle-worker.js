@@ -3,17 +3,43 @@
 //               { type: 'analyse', id, input }
 //               { type: 'lexicon', id, words: string[] | null, name, collins }   (null = built-in ENABLE)
 //               { type: 'simStart', id, input, candidates, plies } | { type: 'simStep', id, iterations }
+//               { type: 'memory', id }
 // Messages out: { type: 'ready', leaves } | { type: 'error', message }
 //               { type: 'result', id, result }
 
 let engine = null;
 const BASE = new URL('../engine/', import.meta.url).href;
+const ENABLE_FILES = ['lexica/enable.dawg', 'lexica/enable.gaddag'];
+let separateFiles = false;   // newer engine builds ship data as separate files
+
+const exists = p => { try { engine.FS.stat(p); return true; } catch (e) { return false; } };
+async function fetchInto(paths) {
+  await Promise.all(paths.map(async p => {
+    const r = await fetch(BASE + 'data/' + p);
+    if (!r.ok) throw new Error(`Couldn't download ${p} (${r.status}).`);
+    engine.FS.mkdirTree('/data/' + p.split('/').slice(0, -1).join('/'));
+    engine.FS.writeFile('/data/' + p, new Uint8Array(await r.arrayBuffer()), { canOwn: true });
+  }));
+}
+// The engine copies the dictionary into its own memory when it loads it, so the file
+// copies are dead weight afterwards: drop them (about 16 MB per engine).
+function releaseDictionaryFiles() {
+  if (!separateFiles) return;
+  for (const p of [...ENABLE_FILES, 'lexica/user.dawg']) if (exists('/data/' + p)) engine.FS.unlink('/data/' + p);
+}
 
 async function load() {
   const { default: createQuackle } = await import('../engine/quackle.js');
   engine = await createQuackle({ locateFile: f => BASE + f });
+  // older builds preload everything; newer ones list their files and the page loads them
+  if (!exists('/data/lexica/enable.gaddag')) {
+    const list = await fetch(BASE + 'files.txt').then(r => r.ok ? r.text() : Promise.reject(new Error('The engine data list is missing.')));
+    await fetchInto(list.split('\n').map(s => s.trim()).filter(Boolean));
+    separateFiles = true;
+  }
   const init = engine.ccall('qk_init', 'number', [], []);
   if (init < 0) throw new Error('The word list for Quackle is missing.');
+  releaseDictionaryFiles();
   return init === 1;
 }
 
@@ -67,25 +93,31 @@ function buildDawg(words) {
   return { bytes: out, nodes: order.length };
 }
 
-let cswLeaves = null;
 async function useLexicon(words, name, collins) {
-  if (!words) return engine.ccall('qk_use_builtin', 'number', [], []) > 0;
+  if (!words) {
+    // the ENABLE files were released after loading; fetch them again (from the offline cache)
+    if (!exists('/data/lexica/enable.gaddag')) await fetchInto(ENABLE_FILES);
+    const ok = engine.ccall('qk_use_builtin', 'number', [], []) > 0;
+    releaseDictionaryFiles();
+    return ok;
+  }
   const { bytes } = buildDawg(words);
-  engine.FS.writeFile('/data/lexica/user.dawg', bytes);
+  engine.FS.mkdirTree('/data/lexica');
+  engine.FS.writeFile('/data/lexica/user.dawg', bytes, { canOwn: true });
   let lexicon = 'user';
   if (collins) {
     try {
-      if (!cswLeaves) {
-        const r = await fetch(BASE + 'csw-superleaves');
+      if (!exists('/data/strategy/csw/superleaves')) {
+        const r = await fetch(BASE + (separateFiles ? 'data/strategy/csw/superleaves' : 'csw-superleaves'));
         if (!r.ok) throw new Error(r.status);
-        cswLeaves = new Uint8Array(await r.arrayBuffer());
+        engine.FS.mkdirTree('/data/strategy/csw');
+        engine.FS.writeFile('/data/strategy/csw/superleaves', new Uint8Array(await r.arrayBuffer()), { canOwn: true });
       }
-      engine.FS.mkdirTree('/data/strategy/csw');
-      engine.FS.writeFile('/data/strategy/csw/superleaves', cswLeaves);
       lexicon = 'csw-user';
     } catch (e) { /* fall back to the default English leave values */ }
   }
   if (engine.ccall('qk_use_lexicon', 'number', ['string', 'string'], ['/data/lexica/user.dawg', lexicon]) < 0) throw new Error('Quackle could not read the word list.');
+  releaseDictionaryFiles();
   return true;
 }
 
@@ -109,6 +141,9 @@ self.onmessage = async e => {
     try { result = JSON.parse(engine.ccall('qk_sim_step', 'string', ['number'], [m.iterations])); }
     catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
     postMessage({ type: 'result', id: m.id, result });
+  } else if (m.type === 'memory') {
+    // engine memory and this worker's JavaScript heap (Chrome only), in bytes
+    postMessage({ type: 'result', id: m.id, result: { ok: true, wasm: engine ? engine.HEAPU8.byteLength : 0, js: self.performance && performance.memory ? performance.memory.usedJSHeapSize : null } });
   } else if (m.type === 'lexicon') {
     let result;
     try { result = { ok: await useLexicon(m.words, m.name, m.collins) }; }
