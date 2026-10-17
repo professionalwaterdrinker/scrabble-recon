@@ -151,6 +151,11 @@ self.onmessage = async e => {
     try { result = JSON.parse(engine.ccall('qk_sim_step', 'string', ['number'], [m.iterations])); }
     catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
     postMessage({ type: 'result', id: m.id, result });
+  } else if (m.type === 'replies') {
+    let result;
+    try { result = JSON.parse(engine.ccall('qk_replies', 'string', ['string', 'number'], [m.input, m.samples])); }
+    catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
+    postMessage({ type: 'result', id: m.id, result });
   } else if (m.type === 'memory') {
     // engine memory and this worker's JavaScript heap (Chrome only), in bytes
     postMessage({ type: 'result', id: m.id, result: { ok: true, wasm: engine ? engine.HEAPU8.byteLength : 0, js: self.performance && performance.memory ? performance.memory.usedJSHeapSize : null } });

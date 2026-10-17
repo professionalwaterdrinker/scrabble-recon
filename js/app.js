@@ -1,8 +1,9 @@
-import { readBoard, getKey, setKey } from './vision.js';
+import { readBoard, getKey, setKey, explainMove } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
 import { createPractice } from './practice.js';
 import { createSimulator, simSectionHtml } from './simulate.js';
+import * as explainFacts from './explain.js';
 
 (() => {
 const N = 15, CENTER = 112, COLS = 'ABCDEFGHIJKLMNO';
@@ -163,7 +164,7 @@ function renderPracticeBoard() {
   for (let i = 0; i < N * N; i++) {
     const el = cellEls[i];
     let html;
-    if (v.ghost && v.ghost.has(i)) { const t = v.ghost.get(i); html = tileMarkup(t.ch, t.blank, 'suggest'); }
+    if (v.ghost && v.ghost.has(i)) { const t = v.ghost.get(i); html = tileMarkup(t.ch, t.blank, t.threat ? 'threat' : 'suggest'); }
     else if (v.pending.has(i)) { const t = v.pending.get(i); html = tileMarkup(t.ch, t.blank, 'pending'); }
     else if (v.cells[i]) html = tileMarkup(v.cells[i], v.blanks.has(i), v.hot.has(i) ? 'new' : '');
     else html = emptySquare(i);
@@ -996,8 +997,14 @@ const practice = createPractice({
   N, CENTER, VAL, PREM, $, escapeHtml, notation, lineRun, renderBoard, pickBlank,
   isWord: w => !DICT || DICT.has(w),
   listName: () => LEX.name,
-  simStart: startSim, simHtml,
-  engine: { ready: qkReady, analyse: qkCall, state: () => QK.state },
+  simStart: startSim, simHtml, explain: explainFacts,
+  engine: {
+    ready: qkReady, analyse: qkCall, state: () => QK.state,
+    // the opponent's best replies after a move, over randomly sampled racks
+    replies: async (input, samples) => { await qkReady(); await qkSyncLexicon(); return qkSend({ type: 'replies', input, samples }); },
+  },
+  // optional write-up by Claude (needs the API key set under Read the photo)
+  writer: { hasKey: () => !!getKey(), write: (facts, signal) => explainMove(facts, getKey(), signal), openKeyDialog: () => openKeyDialog() },
 });
 $('editBtn').onclick = () => setMode('setup');
 

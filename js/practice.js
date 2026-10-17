@@ -258,6 +258,108 @@ export function createPractice(ctx) {
   const sameMove = (a, b) => a && b && a.action === b.action && a.place === b.place &&
     (a.action === 'exchange' ? [...a.tiles].sort().join('') === [...b.tiles].sort().join('') : a.tiles === b.tiles);
 
+  /* ---------- why Quackle's play is better ---------- */
+
+  const whys = {};               // move index -> explanation state (kept for this visit only)
+  const REPLY_SAMPLES = 150;
+
+  // The position before move k, with `mv` as the play that was made.
+  function inputWith(k, mv) {
+    const lines = quackleInput(k).split('\n').filter(l => !l.startsWith('actual') && !l.startsWith('top'));
+    lines.push(mv.action === 'exchange' ? `actual exchange ${mv.tiles}` : mv.action === 'pass' ? 'actual pass' : `actual ${mv.place} ${mv.tiles}`);
+    return lines.join('\n');
+  }
+  function cellsAfter(cells, mv) {
+    const out = cells.slice();
+    if (mv.action === 'place') (playSquares(mv, cells) || []).forEach(x => { if (!x.thru) out[x.i] = x.ch; });
+    return out;
+  }
+  async function explain(k) {
+    const e = G.history[k], a = e && e.analysis;
+    if (!a || !a.moves[0] || !a.actual) return;
+    const w = whys[k] = { status: 'running' };
+    render();
+    try {
+      const top = a.moves[0], mine = a.actual;
+      // older saved reviews don't carry the leave, so work it out
+      for (const mv of [top, mine]) if (mv.leave == null) { const l = keeps(e.rack, mv); mv.leave = l === '–' ? '' : l; }
+      const rTop = await engine.replies(inputWith(k, top), REPLY_SAMPLES);
+      const rMine = await engine.replies(inputWith(k, mine), REPLY_SAMPLES);
+      if (!rTop.ok || !rMine.ok) throw new Error(rTop.error || rMine.error);
+      const before = boardBefore(k);
+      const afterTop = cellsAfter(before.cells, top), afterMine = cellsAfter(before.cells, mine);
+      w.top = ctx.explain.moveFacts(top, { cellsBefore: before.cells, PREM, replies: rTop.replies, label: mv => moveLabel(mv, afterTop) });
+      w.mine = ctx.explain.moveFacts(mine, { cellsBefore: before.cells, PREM, replies: rMine.replies, label: mv => moveLabel(mv, afterMine) });
+      w.list = ctx.explain.checklist(w.top, w.mine);
+      w.status = 'done';
+    } catch (err) {
+      w.status = 'error'; w.error = String(err && err.message || err);
+    }
+    if (viewing === k) render();
+  }
+  async function writeUp(k) {
+    const w = whys[k];
+    if (!w || w.status !== 'done' || !ctx.writer) return;
+    w.writer = { status: 'running' };
+    render();
+    try {
+      const res = await ctx.writer.write(ctx.explain.factsForWriter(w.top, w.mine));
+      w.writer = { status: 'done', ...res };
+    } catch (err) {
+      w.writer = { status: 'error', error: String(err && err.message || err) };
+    }
+    if (viewing === k) render();
+  }
+  function whyHtml(k, e) {
+    const a = e.analysis;
+    if (!a || a.loss === null || a.loss < 0.05 || !a.actual || !a.moves[0]) return '';
+    const w = whys[k];
+    const head = '<h3 class="why-head">Why is Quackle\'s play better?</h3>';
+    if (!w) return `<div class="why">${head}<p class="hint">Mabble compares the two plays: points, the tiles each keeps, what it does to the board, and what the opponent could do next across ${REPLY_SAMPLES} random racks.</p><div class="row"><button class="btn" data-why="run" type="button">Explain the difference</button></div></div>`;
+    if (w.status === 'running') return `<div class="why">${head}<p class="status"><span class="spinner"></span>Dealing ${REPLY_SAMPLES} random racks to the opponent after each play…</p></div>`;
+    if (w.status === 'error') return `<div class="why">${head}<p class="status err">Couldn't explain this move: ${escapeHtml(w.error)}</p><div class="row"><button class="btn" data-why="run" type="button">Try again</button></div></div>`;
+    const li = list => list.map(t => `<li>${t}</li>`).join('');
+    const r1 = w.top.replies, r2 = w.mine.replies;
+    const pct = x => `${Math.round(x * 100)}%`;
+    const compare = `<div class="why-compare">
+      <div><span class="hint">Opponent's best reply, on average</span><b>${r2.average.toFixed(0)}</b> after yours · <b>${r1.average.toFixed(0)}</b> after Quackle's</div>
+      <div><span class="hint">Racks that score 30+</span><b>${pct(r2.over30)}</b> · <b>${pct(r1.over30)}</b></div>
+      <div><span class="hint">Racks that bingo</span><b>${pct(r2.bingo)}</b> · <b>${pct(r1.bingo)}</b></div></div>`;
+    const worst = r2.worst.length ? `<h4 class="why-sub">Worst cases after your play</h4>
+      <p class="hint">The strongest replies the opponent found. Tap one to see it on the board.</p>
+      <div class="worst">${r2.worst.map((x, n) => {
+        const on = preview && preview.key === `${k}:w${n}`;
+        return `<button type="button" class="worst-case ${on ? 'on' : ''}" data-worst="${n}"><span class="ws-score">${x.score}</span><span class="ws-play">${x.label}</span><span class="ws-rack">with ${escapeHtml(x.rack)} · ${x.share >= 0.01 ? Math.round(x.share * 100) + '% of racks' : 'rare'}</span></button>`;
+      }).join('')}</div>` : '';
+    let writer = '';
+    if (ctx.writer) {
+      const wr = w.writer;
+      if (wr && wr.status === 'done') writer = `<div class="coach"><b>Coach's take</b><ul>${li(wr.why.map(escapeHtml))}</ul><ul class="weak">${li(wr.weak.map(escapeHtml))}</ul><p class="note">Written by Claude from the facts above.</p></div>`;
+      else if (wr && wr.status === 'running') writer = '<p class="status"><span class="spinner"></span>Claude is writing it up…</p>';
+      else if (wr && wr.status === 'error') writer = `<p class="status err">${escapeHtml(wr.error)}</p><div class="row"><button class="btn" data-why="write" type="button">Try again</button></div>`;
+      else writer = ctx.writer.hasKey()
+        ? '<div class="row"><button class="btn" data-why="write" type="button">Write it up with Claude</button></div>'
+        : '<p class="hint">For a written explanation, <button class="linkish" data-why="key" type="button">add a Claude API key</button>.</p>';
+    }
+    return `<div class="why">${head}
+      <ul class="why-list">${li(w.list.why)}</ul>
+      <h4 class="why-sub">Weak points of your play</h4>
+      <ul class="why-list weak">${li(w.list.weak)}</ul>
+      ${compare}${worst}${writer}</div>`;
+  }
+  function clickWorst(k, n) {
+    const w = whys[k];
+    if (!w || !w.mine.replies) return;
+    const key = `${k}:w${n}`;
+    if (preview && preview.key === key) { preview = null; render(); return; }
+    const x = w.mine.replies.worst[n];
+    const after = boardBefore(k + 1), sq = playSquares(x.move, after.cells);
+    if (!sq) return;
+    recall(false);
+    preview = { k, key, cells: after.cells, blanks: after.blanks, ghost: new Map(sq.filter(s => !s.thru).map(s => [s.i, { ...s, threat: true }])) };
+    render();
+  }
+
   /* ---------- rendering ---------- */
 
   // What the shared board renderer should draw.
@@ -353,6 +455,7 @@ export function createPractice(ctx) {
     box.innerHTML = `${rack}<p class="verdict">${verdict}</p>
       <div class="moves-wrap qk-table"><table><thead><tr><th>#</th><th>Play</th><th class="num">Pts</th><th class="num">Equity</th><th>Keeps</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
       <p class="note">Click a play to see it on the board as it was before your move. Equity is the score plus Quackle's value for the tiles kept.</p>
+      ${whyHtml(k, e)}
       ${ctx.simHtml ? ctx.simHtml((sims[k] || {}).sim, { label: mv => moveLabel(mv, before.cells), keeps: mv => keeps(e.rack, mv), exact: true }) : ''}`;
   }
 
@@ -447,6 +550,16 @@ export function createPractice(ctx) {
   $('pxReview').addEventListener('click', e => {
     const retry = e.target.closest('[data-retry]');
     if (retry) { const k = +retry.dataset.retry; delete G.history[k].analysisError; analyse(k); return; }
+    const whyBtn = e.target.closest('[data-why]');
+    if (whyBtn && viewing !== null) {
+      const act = whyBtn.dataset.why;
+      if (act === 'run') explain(viewing);
+      else if (act === 'write') writeUp(viewing);
+      else if (act === 'key' && ctx.writer) ctx.writer.openKeyDialog();
+      return;
+    }
+    const worstBtn = e.target.closest('[data-worst]');
+    if (worstBtn && viewing !== null) { clickWorst(viewing, +worstBtn.dataset.worst); return; }
     const simBtn = e.target.closest('[data-sim="run"], [data-sim="stop"]');
     if (simBtn && viewing !== null && ctx.simStart) {
       const k = viewing, holder = sims[k] = sims[k] || {};
