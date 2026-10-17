@@ -2,6 +2,7 @@
 // Messages in:  { type: 'load' }
 //               { type: 'analyse', id, input }
 //               { type: 'lexicon', id, words: string[] | null, name, collins }   (null = built-in ENABLE)
+//               { type: 'simStart', id, input, candidates, plies } | { type: 'simStep', id, iterations }
 // Messages out: { type: 'ready', leaves } | { type: 'error', message }
 //               { type: 'result', id, result }
 
@@ -96,6 +97,16 @@ self.onmessage = async e => {
   } else if (m.type === 'analyse') {
     let result;
     try { result = JSON.parse(engine.ccall('qk_analyse', 'string', ['string'], [m.input])); }
+    catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
+    postMessage({ type: 'result', id: m.id, result });
+  } else if (m.type === 'simStart') {
+    let result;
+    try { result = JSON.parse(engine.ccall('qk_sim_start', 'string', ['string', 'number', 'number'], [m.input, m.candidates, m.plies])); }
+    catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
+    postMessage({ type: 'result', id: m.id, result });
+  } else if (m.type === 'simStep') {
+    let result;
+    try { result = JSON.parse(engine.ccall('qk_sim_step', 'string', ['number'], [m.iterations])); }
     catch (err) { result = { ok: false, error: String(err && err.message || err) }; }
     postMessage({ type: 'result', id: m.id, result });
   } else if (m.type === 'lexicon') {

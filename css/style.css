@@ -302,3 +302,15 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .lex-btn { font: 500 13px var(--f-mono); padding: 8px 12px; border-radius: 10px; background: var(--surface); }
 .check-line { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .check-line input { accent-color: var(--accent); }
+
+/* simulation */
+.sim { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.sim-controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 14px; }
+.sim-controls label { display: inline-flex; gap: 6px; align-items: center; }
+.sim-progress { display: grid; gap: 6px; font: 500 13px var(--f-mono); color: var(--muted); }
+.sim-progress .bar { height: 8px; border-radius: 99px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.sim-progress .bar span { display: block; height: 100%; background: var(--accent); transition: width .25s linear; }
+@media (prefers-reduced-motion: reduce) { .sim-progress .bar span { transition: none; } }
+.delta { font: 500 11.5px var(--f-mono); }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }

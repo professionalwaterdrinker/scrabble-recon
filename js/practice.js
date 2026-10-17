@@ -18,6 +18,7 @@ export function createPractice(ctx) {
   let preview = null;           // { k, key, cells, blanks, ghost } while previewing a Quackle play
   let viewing = null;           // history entry whose analysis is shown
   let message = { text: '', cls: '' };
+  const sims = {};               // move index -> { sim } (kept for this visit only)
 
   /* ---------- game state ---------- */
 
@@ -351,7 +352,8 @@ export function createPractice(ctx) {
     }
     box.innerHTML = `${rack}<p class="verdict">${verdict}</p>
       <div class="moves-wrap qk-table"><table><thead><tr><th>#</th><th>Play</th><th class="num">Pts</th><th class="num">Equity</th><th>Keeps</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
-      <p class="note">Click a play to see it on the board as it was before your move. Equity is the score plus Quackle's value for the tiles kept.</p>`;
+      <p class="note">Click a play to see it on the board as it was before your move. Equity is the score plus Quackle's value for the tiles kept.</p>
+      ${ctx.simHtml ? ctx.simHtml((sims[k] || {}).sim, { label: mv => moveLabel(mv, before.cells), keeps: mv => keeps(e.rack, mv), exact: true }) : ''}`;
   }
 
   function renderHistory() {
@@ -445,6 +447,13 @@ export function createPractice(ctx) {
   $('pxReview').addEventListener('click', e => {
     const retry = e.target.closest('[data-retry]');
     if (retry) { const k = +retry.dataset.retry; delete G.history[k].analysisError; analyse(k); return; }
+    const simBtn = e.target.closest('[data-sim="run"], [data-sim="stop"]');
+    if (simBtn && viewing !== null && ctx.simStart) {
+      const k = viewing, holder = sims[k] = sims[k] || {};
+      if (simBtn.dataset.sim === 'stop') { if (holder.sim && holder.sim.ctl) holder.sim.ctl.abort(); return; }
+      ctx.simStart(holder, quackleInput(k), () => { if (viewing === k) renderReview(); });
+      return;
+    }
     const tr = e.target.closest('tr.qkrow'); if (tr) clickReviewRow(+tr.dataset.k, tr.dataset.n);
   });
   $('pxHistory').addEventListener('click', e => { const tr = e.target.closest('tr[data-view]'); if (tr) { viewing = +tr.dataset.view; preview = null; render(); } });

@@ -2,6 +2,7 @@ import { readBoard, getKey, setKey } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
 import { createPractice } from './practice.js';
+import { createSimulator, simSectionHtml } from './simulate.js';
 
 (() => {
 const N = 15, CENTER = 112, COLS = 'ABCDEFGHIJKLMNO';
@@ -425,7 +426,7 @@ function onResult(m) {
   S.moves = scoreMoves(m.moves);
   S.racks = deduceRacks(S.moves, S.cells, S.blanks, S.players);
   S.est = estimateRacks(S.moves, S.cells, S.blanks, S.players, S.racks);
-  S.preview = null; QK.results = {}; QK.token = null;
+  S.preview = null; QK.results = {}; QK.sims = {}; QK.token = null;
   S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note };
   solveStatus('');
   S.step = 1;
@@ -528,7 +529,7 @@ function renderEndgame(adj) {
 
 /* ---------- Quackle move analysis ---------- */
 // The engine runs in a worker and is only downloaded when asked for.
-const QK = { state: 'idle', worker: null, results: {}, pending: new Map(), nextId: 1, token: null, leaves: true, error: '' };
+const QK = { state: 'idle', worker: null, results: {}, sims: {}, pending: new Map(), nextId: 1, token: null, leaves: true, error: '' };
 
 // A reconstructed move in Quackle's notation: '.' for letters already down, lowercase for blanks.
 function qkMoveLine(m) {
@@ -710,10 +711,18 @@ function renderAnalysis() {
       <thead><tr><th>#</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Equity</th><th>Keeps</th></tr></thead>
       <tbody>${rows.join('')}</tbody></table></div>
     <p class="note">${approx} Click a play to see it on the board. Equity is the score plus Quackle's value for the tiles kept${QK.leaves ? '' : ' (leave values unavailable)'}.</p>
+    ${simHtml((QK.sims[g] || {}).sim, { label: mv => `${mv.place || ''} ${qkWord(mv)}`.trim(), keeps: mv => qkLeave(r.rack, mv.tiles), exact: !ri.likely && !ri.unknown })}
     ${summary}`;
 }
 $('qkCard').addEventListener('click', e => {
   if (e.target.closest('#qkLoad')) { qkLoad(); return; }
+  const simBtn = e.target.closest('[data-sim="run"], [data-sim="stop"]');
+  if (simBtn && S.moves && S.step > 0) {
+    const g = S.step - 1, holder = QK.sims[g] = QK.sims[g] || {};
+    if (simBtn.dataset.sim === 'stop') { if (holder.sim && holder.sim.ctl) holder.sim.ctl.abort(); return; }
+    startSim(holder, qkInput(g, qkRack(g)), () => { if (S.mode === 'replay' && S.step - 1 === g) renderAnalysis(); });
+    return;
+  }
   const tr = e.target.closest('tr.qkrow');
   if (!tr || !S.moves) return;
   const g = S.step - 1, r = QK.results[g];
@@ -861,7 +870,7 @@ function applyLexicon(entry) {
   $('lexBtn').textContent = `Words: ${LEX.name}`;
   $('lexCurrent').textContent = LEX.builtin ? 'ENABLE (built in)' : `${LEX.name} (your file, ${words.length.toLocaleString()} words)`;
   // results from the previous list no longer apply
-  QK.results = {}; QK.token = null;
+  QK.results = {}; QK.sims = {}; QK.token = null;
   if (S.mode === 'replay' && QK.state === 'ready') qkRunAll();
   renderChecks(); renderBoard();
   if (S.mode === 'practice') practice.render();
@@ -937,6 +946,34 @@ $('lexForget').onclick = async () => {
   $('lexDialog').close();
 };
 
+/* ---------- simulation ---------- */
+const simulator = createSimulator({ lexicon: () => LEX });
+const SIM_OPTS = { seconds: 30, plies: 2 };
+// Run a simulation for `holder` (any object; results land in holder.sim), redrawing as it goes.
+async function startSim(holder, input, render) {
+  if (holder.sim && holder.sim.running) return;
+  const ctl = new AbortController();
+  holder.sim = { running: true, ctl, progress: { phase: 'setup', message: 'Starting…' } };
+  render();
+  let drawn = 0;
+  try {
+    const result = await simulator.run(input, {
+      candidates: 6, plies: SIM_OPTS.plies, seconds: SIM_OPTS.seconds, signal: ctl.signal,
+      onProgress: p => { holder.sim.progress = p; const t = performance.now(); if (t - drawn > 250) { drawn = t; render(); } },
+    });
+    holder.sim = result ? { result } : undefined;
+  } catch (e) {
+    holder.sim = { error: (e && e.message) || String(e) };
+  }
+  render();
+}
+function simHtml(sim, helpers) { return simSectionHtml(sim, { escapeHtml, seconds: SIM_OPTS.seconds, plies: SIM_OPTS.plies, ...helpers }); }
+// the Time and Look ahead menus, wherever they appear
+document.addEventListener('change', e => {
+  const k = e.target && e.target.dataset && e.target.dataset.sim;
+  if (k === 'seconds' || k === 'plies') SIM_OPTS[k] = +e.target.value;
+});
+
 /* ---------- practice ---------- */
 // Ask which letter a blank stands for; resolves '' if cancelled.
 function pickBlank() {
@@ -953,6 +990,7 @@ const practice = createPractice({
   N, CENTER, VAL, PREM, $, escapeHtml, notation, lineRun, renderBoard, pickBlank,
   isWord: w => !DICT || DICT.has(w),
   listName: () => LEX.name,
+  simStart: startSim, simHtml,
   engine: { ready: qkReady, analyse: qkCall, state: () => QK.state },
 });
 $('editBtn').onclick = () => setMode('setup');

@@ -77,6 +77,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `tools/make-icons.ps1` | Redraws the PNG icons in `icons/` (Windows PowerShell) |
 | `quackle/` | Bridge and build script for the Quackle engine (WebAssembly) |
 | `js/quackle-worker.js` | Runs the Quackle engine in a background worker |
+| `js/simulate.js` | Runs Quackle simulations on several engine workers in parallel |
 | `js/practice.js` | Practice mode: rules, scoring, rack input and Quackle reviews |
 | `quackle-test.html` | Test bench for Quackle move analysis |
 | `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
@@ -93,7 +94,18 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 - **The analysis card** shows Quackle's top plays for the current move next to the actual play, with score, equity and the tiles each play keeps. Click a play to preview it on the board.
 - **A summary** gives each player's total equity given up.
 
-Analysis is only as reliable as the rack. When the rack includes likely (not certain) tiles, the card says so, and unknown tiles are left out. The engine uses Quackle's quick static evaluation (score plus leave value), not its slower simulation. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
+Analysis is only as reliable as the rack. When the rack includes likely (not certain) tiles, the card says so, and unknown tiles are left out.
+
+### Simulation
+
+Static equity (score plus leave value) is quick, but it can't see openings you give the opponent or how a leave plays on this particular board. Under any analysed move, in Replay or Practice, **Simulate** runs Quackle's simulation on its top six plays plus the one you made.
+
+- **How it works.** Each candidate is played forward one or two more turns, many times over, with random tiles for the opponent each time. The plays are then re-ranked by simulated equity, with Quackle's win estimate alongside.
+- **Settings.** You choose the time (10, 30 or 60 seconds) and how far ahead to look (2 or 3 turns). The progress bar shows the playouts so far, and **Stop** ends early with the results gathered up to then.
+- **Parallel engines.** Quackle's own simulator runs on threads, which a page hosted on GitHub Pages can't use. Instead, the bridge exposes Quackle's single-playout step (`qk_sim_start` and `qk_sim_step`), and `js/simulate.js` runs several engine workers side by side, one per spare CPU core (up to 4, or 2 on phones). Their results are combined.
+- **Speed.** On an 8-core laptop, a 10-second run reaches about 1,400 playouts per play.
+
+Practice racks are exact. Replay racks may be partly estimated, and the card says so when they are. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
 
 ## Word list (ENABLE or your own, such as CSW24)
 
