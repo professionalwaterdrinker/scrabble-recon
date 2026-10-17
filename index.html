@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tile Rewind</title>
+<meta name="description" content="Photograph a finished Scrabble board and rebuild the game move by move, with scores.">
+<meta name="theme-color" content="#1d4740">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand">
+        <div class="mark" aria-hidden="true"><span>R</span><span>E</span><span>W</span></div>
+        <h1>Tile Rewind</h1>
+      </div>
+      <p class="tagline">Photograph a finished Scrabble board and get the game back, move by move.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Mode">
+      <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
+      <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board-col" aria-label="Board">
+      <div class="frame">
+        <div class="coords" id="colLabels"></div>
+        <div class="grid-row">
+          <div class="rowlabels" id="rowLabels"></div>
+          <div class="board" id="board" aria-label="Scrabble board, 15 by 15"></div>
+          <input id="kbd" class="kbd-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Letter for the selected square">
+        </div>
+      </div>
+      <div class="transport" id="transport" hidden>
+        <div class="btns">
+          <button class="icon-btn" id="tFirst" aria-label="Empty board"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+          <button class="icon-btn" id="tPrev" aria-label="Previous move"><svg viewBox="0 0 16 16"><path d="M12 2v12L4 8z"/></svg></button>
+          <button class="icon-btn play" id="tPlay" aria-label="Play"><svg viewBox="0 0 16 16" id="playIcon"><path d="M4 2v12l10-6z"/></svg></button>
+          <button class="icon-btn" id="tNext" aria-label="Next move"><svg viewBox="0 0 16 16"><path d="M4 2v12l8-6z"/></svg></button>
+          <button class="icon-btn" id="tLast" aria-label="Final board"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+        </div>
+        <input type="range" id="tSlider" min="0" max="0" value="0" aria-label="Move">
+        <span class="stepnum" id="tNum">0 / 0</span>
+      </div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--tw)"></i>Triple word</span>
+        <span><i style="background:var(--dw)"></i>Double word</span>
+        <span><i style="background:var(--tl)"></i>Triple letter</span>
+        <span><i style="background:var(--dl)"></i>Double letter</span>
+        <span><i style="background:var(--tile);box-shadow:0 0 0 2px var(--hot)"></i>Just played</span>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <!-- SETUP -->
+      <div id="setup" class="panel">
+        <div class="card">
+          <h2><span class="n">Step 1</span>Read the photo</h2>
+          <label class="drop" id="drop" for="file">
+            <div class="thumb" id="thumb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></div>
+            <div>
+              <strong id="dropTitle">Choose or drop a photo of the board</strong>
+              <span class="hint">Shoot from straight above with the whole board in frame and even light. JPEG, PNG or WebP.</span>
+            </div>
+          </label>
+          <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden">
+          <div class="row">
+            <button class="btn primary" id="readBtn" disabled>Read board from photo</button>
+            <button class="btn" id="stopBtn" hidden>Stop</button>
+          </div>
+          <div class="status" id="visionStatus" hidden></div>
+          <div class="keyrow">
+            <span class="hint" id="keyState">Reading photos uses your own Claude API key.</span>
+            <button class="btn" id="keyBtn" type="button">Set API key</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">Step 2</span>Check the board</h2>
+          <p class="hint">Click a square and type a letter. <span class="kbd">?</span> marks a tile as a blank, <span class="kbd">Backspace</span> clears, arrow keys move, <span class="kbd">Enter</span> switches typing between across and down.</p>
+          <div class="row">
+            <button class="btn" id="sampleBtn">Load sample game</button>
+            <button class="btn" id="textBtn">Edit as text</button>
+            <button class="btn" id="copyBtn">Copy as text</button>
+            <button class="btn" id="clearBtn">Clear board</button>
+          </div>
+          <div id="textBox" hidden>
+            <textarea id="textArea" spellcheck="false" aria-label="Board as text"></textarea>
+            <p class="hint">15 lines of 15 characters. Letters are tiles, lowercase means a blank, a dot is an empty square.</p>
+            <div class="row"><button class="btn primary" id="applyText">Apply text</button><button class="btn" id="cancelText">Cancel</button></div>
+          </div>
+          <div class="checks" id="checks"></div>
+          <details>
+            <summary class="hint" style="cursor:pointer">Tiles not on the board</summary>
+            <div class="unseen" id="unseen"></div>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">Step 3</span>Rebuild the game</h2>
+          <div class="opts">
+            <label>Players <select id="players"><option>2</option><option>3</option><option>4</option></select></label>
+            <label><input type="checkbox" id="strict" checked> Earlier positions must use dictionary words</label>
+          </div>
+          <button class="btn primary big" id="solveBtn" disabled>Loading word list…</button>
+          <div class="status" id="solveStatus" hidden></div>
+        </div>
+      </div>
+
+      <!-- REPLAY -->
+      <div id="replay" class="panel" hidden>
+        <div class="card">
+          <h2 id="replayTitle">Reconstructed game</h2>
+          <div class="scores" id="scores"></div>
+          <p class="note" id="replayMeta"></p>
+        </div>
+        <div class="card">
+          <h2>Moves</h2>
+          <div class="moves-wrap" id="movesWrap">
+            <table>
+              <thead><tr><th>#</th><th>Player</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Total</th></tr></thead>
+              <tbody id="moveRows"></tbody>
+            </table>
+          </div>
+          <div class="row">
+            <button class="btn" id="anotherBtn">Try another order</button>
+            <button class="btn" id="editBtn">Edit the board</button>
+          </div>
+          <p class="note">This is one order of play that fits every word on the board. Others may fit too. Scores follow standard premium squares, count blanks as zero and add 50 for using all seven tiles. End-of-game rack penalties aren't visible on a board, so totals can differ from the score sheet.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<dialog id="keyDialog" aria-labelledby="keyTitle">
+  <form method="dialog" id="keyForm" class="dialog-body">
+    <h2 id="keyTitle">Claude API key</h2>
+    <p class="hint">Tile Rewind sends your board photo straight from this browser to the Claude API using your key. The key is stored only in this browser, and you pay for what you use (one photo is usually a few cents).</p>
+    <p class="hint">Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. A key with a spending limit is a good idea.</p>
+    <label class="field" for="keyInput">API key
+      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+    </label>
+    <div class="row">
+      <button class="btn primary" id="keySave" value="save">Save key</button>
+      <button class="btn" id="keyRemove" value="remove" type="submit">Remove key</button>
+      <button class="btn" value="cancel" type="submit" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "Tile Rewind",
+  "short_name": "Tile Rewind",
+  "description": "Photograph a finished Scrabble board and rebuild the game move by move, with scores.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e7ece7",
+  "theme_color": "#1d4740",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
