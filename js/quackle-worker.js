@@ -21,11 +21,18 @@ async function fetchInto(paths) {
     engine.FS.writeFile('/data/' + p, new Uint8Array(await r.arrayBuffer()), { canOwn: true });
   }));
 }
-// The engine copies the dictionary into its own memory when it loads it, so the file
-// copies are dead weight afterwards: drop them (about 16 MB per engine).
-function releaseDictionaryFiles() {
+let strategyFiles = [];      // leave values and other strategy data, re-read only when the word list changes
+
+// The engine copies the dictionary and leave values into its own memory when it
+// loads them, so the file copies are dead weight afterwards: drop them (about 24 MB
+// per engine). They're fetched again, from the offline cache, if the word list changes.
+function releaseDataFiles() {
   if (!separateFiles) return;
-  for (const p of [...ENABLE_FILES, 'lexica/user.dawg']) if (exists('/data/' + p)) engine.FS.unlink('/data/' + p);
+  for (const p of [...ENABLE_FILES, 'lexica/user.dawg', ...strategyFiles, 'strategy/csw/superleaves']) if (exists('/data/' + p)) engine.FS.unlink('/data/' + p);
+}
+async function restoreStrategyFiles() {
+  if (!separateFiles) return;
+  await fetchInto(strategyFiles.filter(p => !exists('/data/' + p)));
 }
 
 async function load() {
@@ -34,12 +41,14 @@ async function load() {
   // older builds preload everything; newer ones list their files and the page loads them
   if (!exists('/data/lexica/enable.gaddag')) {
     const list = await fetch(BASE + 'files.txt').then(r => r.ok ? r.text() : Promise.reject(new Error('The engine data list is missing.')));
-    await fetchInto(list.split('\n').map(s => s.trim()).filter(Boolean));
+    const files = list.split('\n').map(s => s.trim()).filter(Boolean);
+    await fetchInto(files);
+    strategyFiles = files.filter(p => p.startsWith('strategy/'));
     separateFiles = true;
   }
   const init = engine.ccall('qk_init', 'number', [], []);
   if (init < 0) throw new Error('The word list for Quackle is missing.');
-  releaseDictionaryFiles();
+  releaseDataFiles();
   return init === 1;
 }
 
@@ -96,12 +105,13 @@ function buildDawg(words) {
 async function useLexicon(words, name, collins) {
   if (!words) {
     // the ENABLE files were released after loading; fetch them again (from the offline cache)
-    if (!exists('/data/lexica/enable.gaddag')) await fetchInto(ENABLE_FILES);
+    if (separateFiles) await Promise.all([fetchInto(ENABLE_FILES.filter(p => !exists('/data/' + p))), restoreStrategyFiles()]);
     const ok = engine.ccall('qk_use_builtin', 'number', [], []) > 0;
-    releaseDictionaryFiles();
+    releaseDataFiles();
     return ok;
   }
   const { bytes } = buildDawg(words);
+  await restoreStrategyFiles();
   engine.FS.mkdirTree('/data/lexica');
   engine.FS.writeFile('/data/lexica/user.dawg', bytes, { canOwn: true });
   let lexicon = 'user';
@@ -117,7 +127,7 @@ async function useLexicon(words, name, collins) {
     } catch (e) { /* fall back to the default English leave values */ }
   }
   if (engine.ccall('qk_use_lexicon', 'number', ['string', 'string'], ['/data/lexica/user.dawg', lexicon]) < 0) throw new Error('Quackle could not read the word list.');
-  releaseDictionaryFiles();
+  releaseDataFiles();
   return true;
 }
 
