@@ -198,3 +198,14 @@ dialog::backdrop { background: rgb(10 20 22 / 0.55); }
 .dialog-body a { color: var(--accent); }
 .field { display: grid; gap: 6px; font-weight: 500; font-size: 14px; }
 .field input { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font: 14px var(--f-mono); width: 100%; }
+
+/* reading method + corner picker */
+.method { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.method .opt { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
+.method .opt:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.method input { accent-color: var(--accent); margin-top: 3px; }
+.method b { display: block; font-size: 14px; }
+.method small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.picker-box { display: grid; gap: 8px; }
+.picker { width: 100%; max-width: 100%; display: block; border-radius: 8px; touch-action: none; cursor: crosshair; background: var(--sq); }
+.warp-img { width: 100%; max-width: 420px; border-radius: 6px; margin-top: 8px; display: block; }

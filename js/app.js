@@ -1,4 +1,5 @@
 import { readBoard, getKey, setKey } from './vision.js';
+import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 
 (() => {
 const N = 15, CENTER = 112, COLS = 'ABCDEFGHIJKLMNO';
@@ -247,15 +248,37 @@ function flash(btn, text) { const old = btn.textContent; btn.textContent = text;
 
 /* ---------- photo reading ---------- */
 const visionStatus = (text, cls = '') => { const s = $('visionStatus'); s.hidden = !text; s.className = 'status ' + cls; s.innerHTML = text; };
-function setFile(f) {
+let picker = null;
+async function setFile(f) {
   if (!f || !/^image\//.test(f.type)) { visionStatus('That file is not an image. Choose a JPEG, PNG or WebP photo.', 'err'); return; }
   S.file = f;
   const url = URL.createObjectURL(f);
   $('thumb').innerHTML = `<img alt="Board photo" src="${url}">`;
   $('dropTitle').textContent = f.name;
-  updateReadBtn();
+  $('warpBox').hidden = true;
   visionStatus('');
+  try {
+    S.image = await loadWorkingImage(f);
+    if (picker) picker.destroy();
+    picker = new CornerPicker($('picker'), S.image);
+    renderMethod();
+  } catch (e) {
+    S.file = null; visionStatus('That image could not be opened. Try a JPEG or PNG.', 'err');
+  }
+  updateReadBtn();
 }
+function method() { const el = document.querySelector('input[name="method"]:checked'); return el ? el.value : 'local'; }
+function renderMethod() {
+  const m = method();
+  $('keyRow').hidden = m !== 'claude';
+  $('pickerBox').hidden = m !== 'local' || !S.image;
+  if (!$('pickerBox').hidden && picker) picker.draw();
+}
+document.querySelectorAll('input[name="method"]').forEach(r => r.addEventListener('change', () => {
+  try { localStorage.setItem('tilerewind.method', method()); } catch (e) {}
+  renderMethod();
+}));
+$('rotateBtn').onclick = () => picker && picker.rotate();
 function updateReadBtn() { $('readBtn').disabled = !S.file || !!visionCtl; }
 $('file').onchange = e => setFile(e.target.files[0]);
 const drop = $('drop');
@@ -265,21 +288,31 @@ drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('
 document.addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type)); if (f) setFile(f); });
 
 $('readBtn').onclick = async () => {
+  const local = method() === 'local';
   const key = getKey();
-  if (!key) { openKeyDialog(); return; }
+  if (!local && !key) { openKeyDialog(); return; }
   visionCtl = new AbortController();
   updateReadBtn(); $('stopBtn').hidden = false;
-  visionStatus('<span class="spinner"></span>Reading the board. Careful reading of all 225 squares usually takes 30 to 90 seconds.');
+  visionStatus(local
+    ? '<span class="spinner"></span>Reading the board on this device…'
+    : '<span class="spinner"></span>Reading the board. Careful reading of all 225 squares usually takes 30 to 90 seconds.');
   try {
-    const res = await readBoard(S.file, key, visionCtl.signal);
+    const res = local
+      ? await readBoardLocally(S.image, picker.pts, {
+          signal: visionCtl.signal,
+          isWord: w => !DICT || DICT.has(w),
+          onProgress: t => visionStatus('<span class="spinner"></span>' + escapeHtml(t)),
+        })
+      : await readBoard(S.file, key, visionCtl.signal);
     setFromRows(res.rows);
     res.unsure.forEach(p => S.unsure.add(p[0] * N + p[1]));
     S.isSample = false; S.moves = null; $('tab-replay').disabled = true; saveDraft();
     const a = renderChecks(); renderBoard();
+    if (res.board) { $('warpImg').src = res.board.toDataURL('image/jpeg', 0.85); $('warpBox').hidden = false; }
     visionStatus(`Read ${a.n} tiles. ${res.note ? escapeHtml(res.note) + ' ' : ''}Compare the board with your photo and fix anything that's off before rebuilding.`, 'good');
   } catch (e) {
     if (e && e.code === 'cancelled') visionStatus('Stopped.');
-    else visionStatus(escapeHtml((e && e.code && e.message) || 'Something went wrong reaching Claude. Try again in a moment.'), 'err');
+    else visionStatus(escapeHtml((e && e.code && e.message) || 'Something went wrong reading the photo. Try again.'), 'err');
     if (e && e.code === 'auth') renderKeyState();
   } finally {
     visionCtl = null; $('stopBtn').hidden = true; updateReadBtn();
@@ -290,7 +323,7 @@ $('readBtn').onclick = async () => {
 const keyDialog = $('keyDialog');
 function renderKeyState() {
   const k = getKey();
-  $('keyState').textContent = k ? `Using your Claude API key ending in ${k.slice(-4)}.` : 'Reading photos uses your own Claude API key. Typing the board in works without one.';
+  $('keyState').textContent = k ? `Using your Claude API key ending in ${k.slice(-4)}.` : 'The Claude option uses your own API key. You pay Anthropic for what you use.';
   $('keyBtn').textContent = k ? 'Change key' : 'Set API key';
 }
 function openKeyDialog() { $('keyInput').value = ''; $('keyRemove').hidden = !getKey(); keyDialog.showModal(); $('keyInput').focus(); }
@@ -483,6 +516,8 @@ fetch('data/words.txt').then(r => { if (!r.ok) throw new Error(r.status); return
   solveStatus('The word list did not load. Reload the page to try again.', 'err');
 });
 renderKeyState();
+try { const m = localStorage.getItem('tilerewind.method'); const el = m && document.querySelector(`input[name="method"][value="${m}"]`); if (el) el.checked = true; } catch (e) {}
+renderMethod();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

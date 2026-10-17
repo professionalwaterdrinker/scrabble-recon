@@ -72,12 +72,27 @@
             </div>
           </label>
           <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif" class="visually-hidden">
+          <div class="method" role="radiogroup" aria-label="How to read the photo">
+            <label class="opt"><input type="radio" name="method" value="local" checked>
+              <span><b>On this device</b><small>Free. Nothing is uploaded. You line up the grid.</small></span></label>
+            <label class="opt"><input type="radio" name="method" value="claude">
+              <span><b>Claude API</b><small>More accurate with angled or busy photos. Needs your API key.</small></span></label>
+          </div>
+          <div id="pickerBox" class="picker-box" hidden>
+            <p class="hint">Drag the four dots onto the outer corners of the 15 × 15 grid of squares, so the yellow lines follow the board's lines. The yellow dot is A1, the top-left square when letters read upright.</p>
+            <canvas id="picker" class="picker" aria-label="Board photo with draggable grid corners"></canvas>
+            <div class="row"><button class="btn" id="rotateBtn" type="button">Move A1 to the next corner</button></div>
+          </div>
           <div class="row">
             <button class="btn primary" id="readBtn" disabled>Read board from photo</button>
             <button class="btn" id="stopBtn" hidden>Stop</button>
           </div>
           <div class="status" id="visionStatus" hidden></div>
-          <div class="keyrow">
+          <details id="warpBox" hidden>
+            <summary class="hint">Straightened photo the reader used</summary>
+            <img id="warpImg" class="warp-img" alt="Straightened board photo">
+          </details>
+          <div class="keyrow" id="keyRow" hidden>
             <span class="hint" id="keyState">Reading photos uses your own Claude API key.</span>
             <button class="btn" id="keyBtn" type="button">Set API key</button>
           </div>
