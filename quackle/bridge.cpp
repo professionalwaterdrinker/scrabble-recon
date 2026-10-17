@@ -37,6 +37,7 @@
 #include "player.h"
 #include "playerlist.h"
 #include "rack.h"
+#include "sim.h"
 #include "strategyparameters.h"
 
 using namespace Quackle;
@@ -172,15 +173,19 @@ int qk_use_builtin()
 	return lex->hasDawg() && lex->hasGaddag() ? 1 : -1;
 }
 
-const char *qk_analyse(const char *input)
+// A position described by the page's instructions (see the top of this file).
+struct Setup
 {
-	if (!dm && qk_init() < 0) return fail("word list not loaded").c_str();
-
 	int playerCount = 2, top = 10, rackPlayer = -1;
+	std::string rackText, actualPlace, actualWord;
+};
+
+// Replay the instructions into `game`; returns an error message, or "" when the position is ready.
+static std::string setupPosition(const char *input, Game &game, Setup &s)
+{
 	struct Placed { int player; std::string place, word; };
 	std::vector<Placed> moves;
 	std::vector<std::pair<int, std::string>> holds;
-	std::string rackText, actualPlace, actualWord;
 
 	std::istringstream in(input);
 	std::string line;
@@ -189,19 +194,18 @@ const char *qk_analyse(const char *input)
 		std::istringstream ls(line);
 		std::string cmd;
 		ls >> cmd;
-		if (cmd == "players") ls >> playerCount;
-		else if (cmd == "top") ls >> top;
+		if (cmd == "players") ls >> s.playerCount;
+		else if (cmd == "top") ls >> s.top;
 		else if (cmd == "move") { Placed p; ls >> p.player >> p.place >> p.word; moves.push_back(p); }
-		else if (cmd == "rack") ls >> rackPlayer >> rackText;
+		else if (cmd == "rack") ls >> s.rackPlayer >> s.rackText;
 		else if (cmd == "hold") { int p = -1; std::string t; ls >> p >> t; if (p >= 0 && !t.empty()) holds.push_back({ p, t }); }
-		else if (cmd == "actual") ls >> actualPlace >> actualWord;
+		else if (cmd == "actual") ls >> s.actualPlace >> s.actualWord;
 	}
-	if (playerCount < 2 || playerCount > 4) return fail("players must be 2 to 4").c_str();
-	if (rackPlayer < 0 || rackPlayer >= playerCount || rackText.empty()) return fail("missing rack").c_str();
+	if (s.playerCount < 2 || s.playerCount > 4) return "players must be 2 to 4";
+	if (s.rackPlayer < 0 || s.rackPlayer >= s.playerCount || s.rackText.empty()) return "missing rack";
 
-	Game game;
 	PlayerList players;
-	for (int i = 0; i < playerCount; ++i)
+	for (int i = 0; i < s.playerCount; ++i)
 		players.push_back(Player(MARK_UV("Player ") + std::to_string(i + 1), Player::HumanPlayerType, i));
 	game.setPlayers(players);
 	game.addPosition();
@@ -211,41 +215,61 @@ const char *qk_analyse(const char *input)
 	{
 		const Placed &p = moves[k];
 		GamePosition &pos = game.currentPosition();
-		emptyRacks(pos, playerCount);
+		emptyRacks(pos, s.playerCount);
 		pos.setCurrentPlayer(p.player);
 		pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(rackFor(p.word))));
 		Move m = Move::createPlaceMove(p.place, QUACKLE_ALPHABET_PARAMETERS->encode(p.word));
 		const int validity = pos.validateMove(m);
 		if (validity & (GamePosition::InvalidTiles | GamePosition::InvalidPlace | GamePosition::InvalidOpeningPlace))
-			return fail("move " + std::to_string(k + 1) + " (" + p.place + " " + p.word + ") doesn't fit the board").c_str();
+			return "move " + std::to_string(k + 1) + " (" + p.place + " " + p.word + ") doesn't fit the board";
 		pos.scoreMove(m);
 		game.commitMove(m);
 	}
 
 	GamePosition &pos = game.currentPosition();
-	emptyRacks(pos, playerCount);
+	emptyRacks(pos, s.playerCount);
 	for (const auto &h : holds)
-		if (h.first != rackPlayer && h.first < playerCount)
+		if (h.first != s.rackPlayer && h.first < s.playerCount)
 			pos.setPlayerRack(h.first, Rack(QUACKLE_ALPHABET_PARAMETERS->encode(h.second)), true);
-	pos.setCurrentPlayer(rackPlayer);
-	pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(rackText)));
-	pos.kibitz(top);
+	pos.setCurrentPlayer(s.rackPlayer);
+	pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(s.rackText)));
+	return "";
+}
+
+// The play that was really made, scored and valued from the current position.
+static Move actualMove(GamePosition &pos, const Setup &s, int *validity)
+{
+	Move a = s.actualPlace == "exchange" ? Move::createExchangeMove(QUACKLE_ALPHABET_PARAMETERS->encode(s.actualWord), false)
+		: s.actualPlace == "pass" ? Move::createPassMove()
+		: Move::createPlaceMove(s.actualPlace, QUACKLE_ALPHABET_PARAMETERS->encode(s.actualWord));
+	*validity = pos.validateMove(a);
+	if (a.action == Move::Place) pos.scoreMove(a);
+	a.equity = pos.calculateEquity(a);
+	return a;
+}
+
+const char *qk_analyse(const char *input)
+{
+	if (!dm && qk_init() < 0) return fail("word list not loaded").c_str();
+	Game game;
+	Setup s;
+	const std::string error = setupPosition(input, game, s);
+	if (!error.empty()) return fail(error).c_str();
+
+	GamePosition &pos = game.currentPosition();
+	pos.kibitz(s.top);
 	const MoveList &list = pos.moves();
 
 	std::ostringstream o;
-	o << "{\"ok\":true,\"rack\":\"" << esc(rackText) << "\",\"moves\":[";
+	o << "{\"ok\":true,\"rack\":\"" << esc(s.rackText) << "\",\"moves\":[";
 	for (size_t i = 0; i < list.size(); ++i)
 		o << (i ? "," : "") << moveJson(list[i]);
 	o << "]";
 
-	if (!actualPlace.empty())
+	if (!s.actualPlace.empty())
 	{
-		Move a = actualPlace == "exchange" ? Move::createExchangeMove(QUACKLE_ALPHABET_PARAMETERS->encode(actualWord), false)
-			: actualPlace == "pass" ? Move::createPassMove()
-			: Move::createPlaceMove(actualPlace, QUACKLE_ALPHABET_PARAMETERS->encode(actualWord));
-		const int validity = pos.validateMove(a);
-		if (a.action == Move::Place) pos.scoreMove(a);
-		a.equity = pos.calculateEquity(a);
+		int validity = 0;
+		Move a = actualMove(pos, s, &validity);
 		int rank = -1;
 		for (size_t i = 0; i < list.size(); ++i)
 			if (list[i] == a) { rank = (int)i; break; }
@@ -253,6 +277,120 @@ const char *qk_analyse(const char *input)
 	}
 	o << "}";
 	result = o.str();
+	return result.c_str();
+}
+
+/* ---------- simulation ----------
+ * Quackle's Simulator runs its playouts on a thread pool, which this build
+ * can't create. Its per-playout work (Simulator::simulateOnePosition) is
+ * public, so the page drives the playouts itself, a batch at a time:
+ * qk_sim_start sets up the candidates, qk_sim_step runs more iterations and
+ * reports running results. Several page workers can each run a session and
+ * the page combines them, weighting by iterations.
+ */
+static SimmedMoveConstants *simConstants = nullptr;
+static std::vector<SimmedMove> simMoves;
+static int simIterations = 0;
+
+static std::string simJson()
+{
+	std::ostringstream o;
+	o << "{\"ok\":true,\"iterations\":" << simIterations << ",\"moves\":[";
+	for (size_t i = 0; i < simMoves.size(); ++i)
+	{
+		const SimmedMove &m = simMoves[i];
+		o << (i ? "," : "") << "{\"equity\":" << m.calculateEquity() << ",\"win\":" << m.calculateWinPercentage()
+		  << ",\"spread\":" << (m.gameSpread.hasValues() ? m.gameSpread.averagedValue() : 0.0) << "}";
+	}
+	o << "]}";
+	return o.str();
+}
+
+// Set up a simulation of the top `candidates` plays (plus the actual play, if
+// given) looking `plies` turns ahead. Returns the candidates with their static values.
+const char *qk_sim_start(const char *input, int candidates, int plies)
+{
+	if (!dm && qk_init() < 0) return fail("word list not loaded").c_str();
+	Game game;
+	Setup s;
+	const std::string error = setupPosition(input, game, s);
+	if (!error.empty()) return fail(error).c_str();
+
+	GamePosition &pos = game.currentPosition();
+	pos.kibitz(candidates < 1 ? 1 : candidates);
+	MoveList list = pos.moves();
+	int actualIndex = -1;
+	if (!s.actualPlace.empty())
+	{
+		int validity = 0;
+		Move a = actualMove(pos, s, &validity);
+		for (size_t i = 0; i < list.size(); ++i)
+			if (list[i] == a) { actualIndex = (int)i; break; }
+		if (actualIndex < 0 && validity == GamePosition::ValidMove) { list.push_back(a); actualIndex = (int)list.size() - 1; }
+	}
+
+	// the same bookkeeping Simulator::simulate does before it starts
+	if (plies < 1) plies = 1;
+	const int totalPlies = plies + 1; // plies don't include the candidate itself
+	delete simConstants;
+	simConstants = new SimmedMoveConstants;
+	simConstants->game = game;
+	simConstants->partialOppoRack = Rack(); // the opponent's tiles are unknown: drawn at random each playout
+	simConstants->startPlayerId = pos.currentPlayer().id();
+	simConstants->playerCount = s.playerCount;
+	simConstants->decimalTurns = totalPlies % s.playerCount;
+	simConstants->levelCount = (totalPlies - simConstants->decimalTurns) / s.playerCount;
+	simConstants->ignoreOppos = false;
+	simConstants->isLogging = false;
+
+	simMoves.clear();
+	for (const Move &m : list)
+	{
+		simMoves.push_back(SimmedMove(m));
+		simMoves.back().levels.setNumberLevels(simConstants->levelCount + 1);
+	}
+	simIterations = 0;
+
+	std::ostringstream o;
+	o << "{\"ok\":true,\"rack\":\"" << esc(s.rackText) << "\",\"actualIndex\":" << actualIndex << ",\"candidates\":[";
+	for (size_t i = 0; i < list.size(); ++i)
+		o << (i ? "," : "") << moveJson(list[i]);
+	o << "]}";
+	result = o.str();
+	return result.c_str();
+}
+
+// Run `iterations` more playouts of every candidate and report the running results.
+const char *qk_sim_step(int iterations)
+{
+	if (!simConstants || simMoves.empty()) return fail("no simulation set up").c_str();
+	try
+	{
+		for (int it = 0; it < iterations; ++it)
+		{
+			++simIterations;
+			for (size_t k = 0; k < simMoves.size(); ++k)
+			{
+				SimmedMove &sm = simMoves[k];
+				SimmedMoveMessage msg;
+				msg.id = sm.id();
+				msg.moveIndex = (int)k;
+				msg.iteration = simIterations;
+				msg.move = sm.move;
+				msg.levels.setNumberLevels(simConstants->levelCount + 1);
+				Simulator::simulateOnePosition(msg, *simConstants);
+				sm.levels.incorporate(msg.levels);
+				sm.residual.incorporateValue(msg.residual);
+				sm.gameSpread.incorporateValue(msg.gameSpread);
+				sm.wins.incorporateValue(msg.wins);
+			}
+		}
+	}
+	catch (const std::exception &e)
+	{
+		return fail(std::string("simulation stopped: ") + e.what()).c_str();
+	}
+	result = simJson();
 	return result.c_str();
 }
 
