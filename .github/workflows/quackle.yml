@@ -1,0 +1,52 @@
+name: Build Quackle engine
+
+# Compiles the Quackle engine to WebAssembly and publishes the result to the
+# quackle-build branch, so the site's own deploy never depends on it.
+on:
+  push:
+    branches: [quackle-poc]
+    paths: ['quackle/**', '.github/workflows/quackle.yml', 'data/words.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # Quackle source used for the build (github.com/quackle/quackle)
+  QUACKLE_COMMIT: 35e11bb21a3bf362c533541d0b5fe8ad92a0c08f
+  EMSDK_VERSION: 3.1.74
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Quackle source
+        run: |
+          git init -q ../quackle-src
+          git -C ../quackle-src fetch -q --depth 1 https://github.com/quackle/quackle.git "$QUACKLE_COMMIT"
+          git -C ../quackle-src checkout -q FETCH_HEAD
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Build
+        run: bash quackle/build.sh ../quackle-src dist
+
+      - name: Publish to the quackle-build branch
+        run: |
+          cp quackle/README.md dist/README.md
+          cd dist
+          git init -q -b quackle-build
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Quackle engine build from ${GITHUB_SHA::7} (Quackle ${QUACKLE_COMMIT::7})"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" quackle-build
