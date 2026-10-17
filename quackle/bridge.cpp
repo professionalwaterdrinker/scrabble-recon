@@ -56,8 +56,9 @@ static std::string esc(const std::string &s)
 static std::string moveJson(const Move &m)
 {
 	std::ostringstream o;
+	const LetterString &shown = m.prettyTiles().empty() ? m.tiles() : m.prettyTiles();
 	o << "{\"place\":\"" << esc(m.positionString()) << "\",\"word\":\""
-	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(m.prettyTiles())) << "\",\"tiles\":\""
+	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(shown)) << "\",\"tiles\":\""
 	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(m.tiles())) << "\",\"score\":" << m.effectiveScore()
 	  << ",\"equity\":" << m.equity << ",\"text\":\"" << esc(m.toString()) << "\"}";
 	return o.str();
@@ -81,6 +82,34 @@ static std::string rackFor(const std::string &word)
 	return r;
 }
 
+// The standard 15x15 board. (Quackle's EnglishBoard class is a 13x17 test board,
+// and plain BoardParameters has no premium squares.) Premiums are given for one
+// octant and mirrored, the same way the web app draws its board.
+static BoardParameters *standardBoard()
+{
+	BoardParameters *b = new BoardParameters();
+	b->setName(MARK_UV("Standard"));
+	struct P { int r, c; bool word; int mult; };
+	const P octant[] = {
+		{ 0, 3, false, 2 }, { 2, 6, false, 2 }, { 3, 7, false, 2 }, { 6, 6, false, 2 },
+		{ 1, 5, false, 3 }, { 5, 5, false, 3 },
+		{ 1, 1, true, 2 }, { 2, 2, true, 2 }, { 3, 3, true, 2 }, { 4, 4, true, 2 }, { 7, 7, true, 2 },
+		{ 0, 0, true, 3 }, { 0, 7, true, 3 },
+	};
+	for (const P &p : octant)
+	{
+		const int rr[2][2] = { { p.r, p.c }, { p.c, p.r } };
+		for (const auto &rc : rr)
+			for (int row : { rc[0], 14 - rc[0] })
+				for (int col : { rc[1], 14 - rc[1] })
+				{
+					if (p.word) b->setWordMultiplier(row, col, (BoardParameters::WordMultiplier)p.mult);
+					else b->setLetterMultiplier(row, col, (BoardParameters::LetterMultiplier)p.mult);
+				}
+	}
+	return b;
+}
+
 extern "C" {
 
 // Load the word list and strategy files from the bundled /data folder.
@@ -91,7 +120,7 @@ int qk_init()
 	dm->setAppDataDirectory("/data");
 	dm->setUserDataDirectory("/data");
 	dm->setBackupLexicon("default_english");
-	dm->setBoardParameters(new EnglishBoard());
+	dm->setBoardParameters(standardBoard());
 	dm->lexiconParameters()->loadDawg("/data/lexica/enable.dawg");
 	dm->lexiconParameters()->loadGaddag("/data/lexica/enable.gaddag");
 	dm->lexiconParameters()->setLexiconName("enable");
