@@ -52,6 +52,20 @@
         <input type="range" id="tSlider" min="0" max="0" value="0" aria-label="Move">
         <span class="stepnum" id="tNum">0 / 0</span>
       </div>
+      <div class="shelves" id="shelves" hidden>
+        <div id="shelfList"></div>
+        <div class="shelf-key" id="shelfKey">
+          <span><i class="rtile key"></i>Certain</span>
+          <span><i class="rtile key likely"></i>Likely, with its chance</span>
+          <span><i class="rtile key played"></i>Played this move</span>
+          <span><i class="rtile key unknown">?</i>Never played, unknown</span>
+          <span id="bagCount" class="bag"></span>
+        </div>
+        <details class="shelf-how">
+          <summary class="hint">How racks are worked out</summary>
+          <p class="note">Each player starts with 7 tiles and draws as many as they play. Every tile a player puts down had to be drawn before that move. The app considers every draw order that fits, as if from a well-shuffled bag, and shows how often each tile was on the rack. Tiles marked certain were on the rack in every possible order: the ones played that turn, ones later plays forced onto the rack, and everything once the bag is empty. Tiles never played can only be named when the game finished with one player going out. This assumes the rebuilt order is right and that nobody passed or exchanged tiles.</p>
+        </details>
+      </div>
       <div class="legend" id="legend">
         <span><i style="background:var(--tw)"></i>Triple word</span>
         <span><i style="background:var(--dw)"></i>Double word</span>
@@ -139,15 +153,6 @@
           <div class="scores" id="scores"></div>
           <p class="note" id="replayMeta"></p>
           <p class="note" id="endgame" hidden></p>
-        </div>
-        <div class="card">
-          <h2 id="rackTitle">Rack</h2>
-          <div class="rack" id="rack" aria-label="Tiles on the rack"></div>
-          <div class="rack-notes" id="rackNotes"></div>
-          <details>
-            <summary class="hint" style="cursor:pointer">How racks are worked out</summary>
-            <p class="note">Each player starts with 7 tiles and draws as many as they play. The tiles played on a turn were certainly on the rack. When later plays use more tiles than the player drew in between, the difference was already on the rack. Once the bag is empty, everything played later was already there. This assumes the rebuilt order is right and that nobody passed or exchanged tiles.</p>
-          </details>
         </div>
         <div class="card">
           <h2>Moves</h2>

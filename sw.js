@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'tile-rewind-v4';
+const VERSION = 'tile-rewind-v5';
 const SHELL = [
   './',
   'index.html',

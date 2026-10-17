@@ -99,3 +99,107 @@ export function deduceRacks(moves, cells, blanks, players) {
   }
   return { racks, bagEnd, finalSize, finalRack, unseen, endgame };
 }
+
+/* ---------- best estimate of every rack ---------- */
+
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+
+// Earliest-deadline-first: can every tile be drawn before its deadline if tile x
+// may not be drawn before position `release`? (Exact for one-at-a-time draws.)
+function feasibleWithRelease(dl, x, release) {
+  const n = dl.length, used = new Uint8Array(n);
+  for (let pos = 0; pos < n; pos++) {
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (used[i] || (i === x && pos < release)) continue;
+      if (best < 0 || dl[i] < dl[best]) best = i;
+    }
+    if (best < 0 || dl[best] <= pos) return false;
+    used[best] = 1;
+  }
+  return true;
+}
+
+// The player's draws are modelled as a random order of all the tiles they ever
+// drew (the ones they played plus whatever they held at the end), with each tile
+// drawn before the move that played it. We sample those orders uniformly and
+// count how often each tile was on the rack at each turn.
+export function estimateRacks(moves, cells, blanks, players, ded, { samples = 1500, seed = 7 } = {}) {
+  const own = Array.from({ length: players }, () => []);
+  moves.forEach((m, g) => own[m.player].push(g));
+  const perPlayer = own.map((seq, p) => {
+    if (!seq.length) return { seq, racks: [], final: [] };
+    // S[t] = how many tiles the player had drawn before their t-th move
+    const S = [RACK];
+    seq.forEach((g, t) => S.push(S[t] + ded.racks[g].drew));
+    const tiles = [], dl = [], playedAt = [];
+    seq.forEach((g, t) => moves[g].tiles.forEach(i => {
+      tiles.push(blanks.has(i) ? { ch: '?', as: cells[i], move: g } : { ch: cells[i], move: g });
+      dl.push(S[t]); playedAt.push(t);
+    }));
+    const total = S[seq.length];
+    const fr = ded.finalRack[p];
+    for (let k = 0; tiles.length < total; k++) {
+      tiles.push(fr ? { ...fr[k], final: true } : { ch: '?', unknown: true, final: true });
+      dl.push(total); playedAt.push(Infinity);
+    }
+    const n = tiles.length;
+    // start from a valid order: earliest deadline first
+    const arr = [...tiles.keys()].sort((a, b) => dl[a] - dl[b]);
+    const valid = arr.every((x, pos) => pos < dl[x]);
+    const counts = seq.map(() => new Float64Array(n));
+    let taken = 0;
+    if (valid && n > 1) {
+      const rand = mulberry(seed * 131 + p * 7919 + n);
+      const burn = 40 * n, thin = Math.max(4, n >> 1);
+      for (let step = 0; taken < samples; step++) {
+        const a = (rand() * n) | 0, b = (rand() * n) | 0;
+        if (a !== b && b < dl[arr[a]] && a < dl[arr[b]]) { const tmp = arr[a]; arr[a] = arr[b]; arr[b] = tmp; }
+        if (step >= burn && step % thin === 0) {
+          for (let t = 0; t < seq.length; t++) {
+            const c = counts[t];
+            for (let pos = 0; pos < S[t]; pos++) { const x = arr[pos]; if (playedAt[x] >= t) c[x]++; }
+          }
+          taken++;
+        }
+      }
+    }
+    const racks = seq.map((g, t) => {
+      const size = ded.racks[g].size;
+      const list = [];
+      for (let x = 0; x < n; x++) {
+        if (playedAt[x] < t) continue;
+        const now = playedAt[x] === t;
+        const prob = now ? 1 : (taken ? counts[t][x] / taken : 0);
+        if (prob <= 0) continue;
+        list.push({ tile: tiles[x], x, prob, now });
+      }
+      list.sort((a, b) => (b.now - a.now) || (b.prob - a.prob) || (a.tile.unknown ? 1 : 0) - (b.tile.unknown ? 1 : 0));
+      const rack = list.slice(0, size);
+      // "certain" only when no valid draw order could have left the tile in the bag
+      rack.forEach(r => { r.certain = r.now || (r.prob > 0.9 && !feasibleWithRelease(dl, r.x, S[t])); });
+      return { g, size, tiles: rack };
+    });
+    const final = tiles.filter(t => t.final).map(t => ({ tile: t, prob: 1, certain: !t.unknown }));
+    return { seq, racks, final };
+  });
+
+  // What every player holds once `step` moves have been played.
+  function at(step) {
+    const mover = step > 0 ? moves[step - 1].player : -1;
+    return perPlayer.map((pp, p) => {
+      if (!pp.seq.length) return { player: p, mode: 'none', tiles: [] };
+      if (p === mover) {
+        const t = pp.seq.indexOf(step - 1);
+        return { player: p, mode: 'played', move: step - 1, ...pp.racks[t] };
+      }
+      const t = pp.seq.findIndex(g => g >= step);
+      if (t >= 0) return { player: p, mode: 'holding', ...pp.racks[t] };
+      return { player: p, mode: 'final', tiles: pp.final };
+    });
+  }
+  return { at };
+}
