@@ -1,0 +1,8 @@
+lexica/enable.dawg
+lexica/enable.gaddag
+strategy/default/bogowin
+strategy/default/worths
+strategy/default_english/superleaves
+strategy/default_english/syn2
+strategy/default_english/vcplace
+strategy/default_english/worths
