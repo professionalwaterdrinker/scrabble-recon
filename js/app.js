@@ -1,6 +1,7 @@
 import { readBoard, getKey, setKey } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
+import { createPractice } from './practice.js';
 
 (() => {
 const N = 15, CENTER = 112, COLS = 'ABCDEFGHIJKLMNO';
@@ -150,7 +151,29 @@ function buildBoard() {
   }
 }
 const STAR = '<svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 20.9l1.6-7L2 9.2l7.1-.6z"/></svg>';
+const tileMarkup = (ch, blank, cls) => `<div class="tile${blank ? ' blank' : ''}${cls ? ' ' + cls : ''}"><b>${ch}</b>${blank ? '' : `<i>${VAL[ch]}</i>`}</div>`;
+function emptySquare(i) { return i === CENTER ? STAR : PREM[i] ? `<span class="prem">${PREM[i].toUpperCase()}</span>` : ''; }
+// Practice mode draws its own game: placed tiles, tiles waiting to be played, and previews.
+function renderPracticeBoard() {
+  const v = practice && practice.view();
+  if (!v) return;
+  boardEl.classList.add('editable');
+  const focused = document.activeElement === kbd;
+  for (let i = 0; i < N * N; i++) {
+    const el = cellEls[i];
+    let html;
+    if (v.ghost && v.ghost.has(i)) { const t = v.ghost.get(i); html = tileMarkup(t.ch, t.blank, 'suggest'); }
+    else if (v.pending.has(i)) { const t = v.pending.get(i); html = tileMarkup(t.ch, t.blank, 'pending'); }
+    else if (v.cells[i]) html = tileMarkup(v.cells[i], v.blanks.has(i), v.hot.has(i) ? 'new' : '');
+    else html = emptySquare(i);
+    const key = 'p' + html;
+    if (el._k !== key) { el.innerHTML = html; el._k = key; }
+    el.classList.toggle('sel', i === v.cursor && focused);
+    el.classList.toggle('dir0', v.dir === 0); el.classList.toggle('dir1', v.dir === 1);
+  }
+}
 function renderBoard() {
+  if (S.mode === 'practice') { renderPracticeBoard(); return; }
   let show, hot = new Set(), bad = new Set(), ghost = null;
   if (S.mode === 'replay' && S.moves) {
     show = new Set();
@@ -187,6 +210,13 @@ function renderBoard() {
 /* ---------- editing ---------- */
 function changed() { S.isSample = false; S.moves = null; $('tab-replay').disabled = true; saveDraft(); renderChecks(); renderBoard(); }
 boardEl.addEventListener('mousedown', e => {
+  if (S.mode === 'practice') {
+    const sq = e.target.closest('.sq'); if (!sq) return;
+    e.preventDefault();
+    kbd.focus({ preventScroll: true });
+    practice.clickSquare(+sq.dataset.i);
+    return;
+  }
   if (S.mode !== 'setup') return;
   const sq = e.target.closest('.sq'); if (!sq) return;
   e.preventDefault();
@@ -223,17 +253,23 @@ function editKey(k) {
   renderBoard();
   return true;
 }
+const PRACTICE_KEYS = /^([a-zA-Z]|Backspace|Enter|Escape| |Arrow(Left|Right|Up|Down))$/;
+// One key, whichever mode is showing.
+function boardKey(k) {
+  if (S.mode === 'practice') { if (!PRACTICE_KEYS.test(k)) return false; practice.key(k); return true; }
+  return editKey(k);
+}
 kbd.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Unidentified' || e.key === 'Process') return;
-  if (editKey(e.key)) e.preventDefault();
+  if (boardKey(e.key)) e.preventDefault();
 });
 // phone keyboards often skip keydown details; read what they insert instead
 kbd.addEventListener('beforeinput', e => {
-  if (e.inputType === 'deleteContentBackward') { e.preventDefault(); editKey('Backspace'); }
+  if (e.inputType === 'deleteContentBackward') { e.preventDefault(); boardKey('Backspace'); }
 });
 kbd.addEventListener('input', () => {
   const v = kbd.value; kbd.value = '';
-  for (const ch of v) editKey(ch);
+  for (const ch of v) boardKey(ch);
 });
 $('checks').addEventListener('click', e => {
   const chip = e.target.closest('.chip'); if (!chip) return;
@@ -520,17 +556,29 @@ function qkInput(g, rack) {
 function qkCall(input) {
   return new Promise(res => { const id = QK.nextId++; QK.pending.set(id, res); QK.worker.postMessage({ type: 'analyse', id, input }); });
 }
+// Resolves once the engine is ready, loading it if needed.
+function qkReady() {
+  if (QK.state === 'ready') return Promise.resolve();
+  const p = new Promise((res, rej) => { (QK.waiters = QK.waiters || []).push({ res, rej }); });
+  if (QK.state !== 'loading') qkLoad();
+  return p;
+}
+function qkSettle(ok, err) {
+  (QK.waiters || []).forEach(w => ok ? w.res() : w.rej(new Error(err)));
+  QK.waiters = [];
+  if (practice && S.mode === 'practice') practice.render();
+}
 function qkLoad() {
   QK.state = 'loading'; QK.error = ''; renderAnalysis();
   try { QK.worker = new Worker('js/quackle-worker.js', { type: 'module' }); }
   catch (e) { QK.state = 'error'; QK.error = 'This browser cannot run the engine.'; renderAnalysis(); return; }
   QK.worker.onmessage = e => {
     const m = e.data;
-    if (m.type === 'ready') { QK.state = 'ready'; QK.leaves = m.leaves; qkRunAll(); }
-    else if (m.type === 'error') { QK.state = 'error'; QK.error = m.message; renderAnalysis(); }
+    if (m.type === 'ready') { QK.state = 'ready'; QK.leaves = m.leaves; qkSettle(true); qkRunAll(); }
+    else if (m.type === 'error') { QK.state = 'error'; QK.error = m.message; qkSettle(false, m.message); renderAnalysis(); }
     else if (m.type === 'result') { const r = QK.pending.get(m.id); QK.pending.delete(m.id); if (r) r(m.result); }
   };
-  QK.worker.onerror = () => { QK.state = 'error'; QK.error = 'The engine could not be downloaded. Check your connection and try again.'; renderAnalysis(); };
+  QK.worker.onerror = () => { QK.state = 'error'; QK.error = 'The engine could not be downloaded. Check your connection and try again.'; qkSettle(false, QK.error); renderAnalysis(); };
   QK.worker.postMessage({ type: 'load' });
 }
 // Analyse every move: the one on screen first, then the rest in order.
@@ -734,19 +782,45 @@ document.addEventListener('keydown', e => {
 function setMode(mode) {
   stopPlay();
   S.mode = mode;
-  document.body.classList.toggle('replaying', mode === 'replay');
+  document.body.classList.toggle('replaying', mode !== 'setup');
   $('setup').hidden = mode !== 'setup';
   $('replay').hidden = mode !== 'replay';
+  $('practice').hidden = mode !== 'practice';
   $('transport').hidden = mode !== 'replay';
   $('shelves').hidden = mode !== 'replay';
+  $('pxRackBox').hidden = mode !== 'practice';
+  $('legend').hidden = mode === 'practice';
   $('tab-setup').setAttribute('aria-selected', mode === 'setup');
   $('tab-replay').setAttribute('aria-selected', mode === 'replay');
+  $('tab-practice').setAttribute('aria-selected', mode === 'practice');
   $('tab-replay').disabled = !S.moves;
-  if (mode === 'replay') renderReplay(); else renderChecks();
+  boardEl.classList.remove('editable');
+  if (mode === 'replay') renderReplay();
+  else if (mode === 'practice') practice.enter();
+  else renderChecks();
   renderBoard();
 }
 $('tab-setup').onclick = () => setMode('setup');
 $('tab-replay').onclick = () => S.moves && setMode('replay');
+$('tab-practice').onclick = () => setMode('practice');
+
+/* ---------- practice ---------- */
+// Ask which letter a blank stands for; resolves '' if cancelled.
+function pickBlank() {
+  const dlg = $('blankDialog');
+  $('blankGrid').innerHTML = [...COLS, 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].map(ch => `<button class="btn" value="${ch}" type="submit">${ch}</button>`).join('');
+  return new Promise(res => {
+    dlg.querySelector('form').onsubmit = e => { res(e.submitter ? e.submitter.value : ''); };
+    dlg.onclose = () => res(dlg.returnValue || '');
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+const practice = createPractice({
+  N, CENTER, VAL, PREM, $, escapeHtml, notation, lineRun, renderBoard, pickBlank,
+  isWord: w => !DICT || DICT.has(w),
+  engine: { ready: qkReady, analyse: qkCall, state: () => QK.state },
+});
 $('editBtn').onclick = () => setMode('setup');
 
 /* ---------- boot ---------- */

@@ -28,6 +28,7 @@
     <div class="tabs" role="tablist" aria-label="Mode">
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>
+      <button role="tab" id="tab-practice" aria-selected="false">Practice</button>
     </div>
   </header>
 
@@ -51,6 +52,11 @@
         </div>
         <input type="range" id="tSlider" min="0" max="0" value="0" aria-label="Move">
         <span class="stepnum" id="tNum">0 / 0</span>
+      </div>
+      <div class="shelves" id="pxRackBox" hidden>
+        <div id="pxRacks"></div>
+        <p class="px-live" id="pxLive" aria-live="polite"></p>
+        <p class="hint px-help">Tap a tile, then a square. Or tap a square and type; tap it again or press <span class="kbd">Space</span> to switch across or down. <span class="kbd">Enter</span> plays, <span class="kbd">Backspace</span> takes back a tile, <span class="kbd">Esc</span> recalls them all.</p>
       </div>
       <div class="shelves" id="shelves" hidden>
         <div id="shelfList"></div>
@@ -146,6 +152,34 @@
         </div>
       </div>
 
+      <!-- PRACTICE -->
+      <div id="practice" class="panel" hidden>
+        <div class="card">
+          <h2>Practice game</h2>
+          <p class="hint">Play an untimed game against yourself, taking each rack in turn. The rack not on turn stays face down. After every move, Quackle shows the plays with the highest equity next to yours.</p>
+          <div class="scores" id="pxScores"></div>
+          <div class="row px-controls">
+            <button class="btn primary" id="pxPlay" disabled>Play</button>
+            <button class="btn" id="pxRecall">Recall</button>
+            <button class="btn" id="pxShuffle">Shuffle</button>
+            <button class="btn" id="pxExchange">Exchange</button>
+            <button class="btn primary" id="pxConfirm" hidden>Exchange chosen tiles</button>
+            <button class="btn" id="pxPass">Pass</button>
+          </div>
+          <p class="status" id="pxMsg" hidden></p>
+          <div class="row px-foot"><span class="bag" id="pxBag"></span><button class="btn" id="pxNew">New game</button></div>
+        </div>
+        <div class="card">
+          <h2 id="pxReviewTitle">Quackle review</h2>
+          <div id="pxReview"></div>
+        </div>
+        <div class="card">
+          <h2>Moves</h2>
+          <p class="note" id="pxTotals"></p>
+          <div class="moves-wrap" id="pxHistory"></div>
+        </div>
+      </div>
+
       <!-- REPLAY -->
       <div id="replay" class="panel" hidden>
         <div class="card">
@@ -179,6 +213,14 @@
     </aside>
   </main>
 </div>
+
+<dialog id="blankDialog" aria-labelledby="blankTitle">
+  <form method="dialog" class="dialog-body">
+    <h2 id="blankTitle">Which letter is the blank?</h2>
+    <div class="blank-grid" id="blankGrid"></div>
+    <div class="row"><button class="btn" value="" type="submit">Cancel</button></div>
+  </form>
+</dialog>
 
 <dialog id="keyDialog" aria-labelledby="keyTitle">
   <form method="dialog" id="keyForm" class="dialog-body">

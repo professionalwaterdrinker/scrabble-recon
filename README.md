@@ -77,6 +77,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `tools/make-icons.ps1` | Redraws the PNG icons in `icons/` (Windows PowerShell) |
 | `quackle/` | Bridge and build script for the Quackle engine (WebAssembly) |
 | `js/quackle-worker.js` | Runs the Quackle engine in a background worker |
+| `js/practice.js` | Practice mode: rules, scoring, rack input and Quackle reviews |
 | `quackle-test.html` | Test bench for Quackle move analysis |
 | `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
 
@@ -93,6 +94,17 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 - **A summary** gives each player's total equity given up.
 
 Analysis is only as reliable as the rack. When the rack includes likely (not certain) tiles, the card says so, and unknown tiles are left out. The engine uses Quackle's quick static evaluation (score plus leave value), not its slower simulation. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
+
+## Practice mode
+
+The **Practice** tab is an untimed game against yourself. It deals two racks from a shuffled 100-tile bag, and you play each rack in turn, while the rack not on turn stays face down.
+
+- **Making a move.** Tap a tile and then a square, or tap a square and type. Blanks ask which letter they stand for. A live check shows whether the play is legal (one line, no gaps, connected, centre star first, every word in the word list) and what it scores.
+- **Your options.** Play, Recall, Shuffle, Exchange (when the bag holds at least 7 tiles) or Pass.
+- **Quackle reviews every move.** After each move, Quackle analyses the exact position and the exact rack you held, with the other rack set too so its bag matches the real one. It shows its highest-equity plays next to yours, including exchanges. Click any of them to see it on the board as it was before your move.
+- **Running totals.** The move list shows how much equity each move gave up, with a total for each player.
+- **The ending** follows standard rules: going out with the bag empty earns the other rack's value, and six scoreless turns in a row end the game.
+- **Saved automatically.** The game is saved in your browser, so you can come back to it later.
 
 ## Licence
 
