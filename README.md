@@ -75,10 +75,21 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and install metadata |
 | `tools/gen_sample.py` | Script that simulated the built-in sample game |
 | `tools/make-icons.ps1` | Redraws the PNG icons in `icons/` (Windows PowerShell) |
+| `quackle/` | Bridge and build script for the Quackle engine (WebAssembly) |
+| `quackle-test.html` | Test bench for Quackle move analysis |
+| `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
 
 ## Board text format
 
 **Edit as text** and **Copy as text** use 15 lines of 15 characters: an uppercase letter is a tile, a lowercase letter is a blank, and `.` is an empty square.
+
+## Move analysis with Quackle (proof of concept)
+
+[Quackle](https://github.com/quackle/quackle), the open-source crossword-game AI, is compiled to WebAssembly so it can analyse positions in the browser. `quackle-test.html` is a test bench: it replays a position, asks Quackle for its best plays with a given rack, and compares them with the play that was made. See [`quackle/README.md`](quackle/README.md) for how the engine is built. It isn't wired into the main app yet. Move analysis will only be as reliable as the rack it's given, and racks reconstructed from a photo are partly estimated.
+
+## Licence
+
+Tile Rewind is free software under the [GNU General Public License, version 3](LICENSE) or later, because it includes the Quackle engine (© Jason Katz-Brown, John O'Laughlin, John Fultz and contributors, GPLv3). The ENABLE word list is in the public domain.
 
 ## Notes
 

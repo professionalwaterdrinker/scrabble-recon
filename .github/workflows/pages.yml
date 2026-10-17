@@ -22,6 +22,15 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # The Quackle engine is built by quackle.yml into the quackle-build branch.
+      - name: Add the Quackle engine build
+        run: |
+          if git ls-remote --exit-code origin quackle-build > /dev/null; then
+            git fetch -q --depth 1 origin quackle-build
+            mkdir -p engine
+            git archive FETCH_HEAD quackle.js quackle.wasm quackle.data | tar -x -C engine
+            ls -l engine
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

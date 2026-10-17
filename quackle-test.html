@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quackle Test Bench</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .bench { max-width: 900px; margin: 0 auto; display: grid; gap: 16px; }
+  .bench textarea { min-height: 220px; }
+  .verdict { font-size: 15px; }
+  .verdict b { font-family: var(--f-display); }
+  .best td { font-weight: 600; }
+  .played td { background: color-mix(in srgb, var(--hot) 18%, transparent); }
+</style>
+</head>
+<body>
+<div class="bench">
+  <header class="top">
+    <div>
+      <div class="brand">
+        <div class="mark" aria-hidden="true"><span>R</span><span>E</span><span>W</span></div>
+        <h1>Quackle test bench</h1>
+      </div>
+      <p class="tagline">Proof of concept: the Quackle engine, compiled to WebAssembly, analysing one position in this browser.</p>
+    </div>
+    <a class="btn" href="./">Back to Tile Rewind</a>
+  </header>
+
+  <div class="card">
+    <h2>Position</h2>
+    <p class="hint">One instruction per line. <span class="kbd">move &lt;player&gt; &lt;place&gt; &lt;word&gt;</span> replays a play (players count from 0, <span class="kbd">8H</span> is across from H8, <span class="kbd">H8</span> is down, <span class="kbd">.</span> is a letter already on the board, lowercase is a blank). <span class="kbd">rack</span> is the rack to analyse, <span class="kbd">actual</span> is the play that was really made.</p>
+    <textarea id="input" spellcheck="false" aria-label="Position to analyse">players 2
+move 0 H7 ER
+move 1 7E BER.T
+move 0 E4 SCA.
+move 1 4C HI.T
+move 0 3C EL
+move 1 5E .OMA
+move 0 4H LIDO
+move 1 I2 KH.s
+move 0 3I .OMO
+move 1 L2 C.S
+rack 0 PINEDET
+actual 9E PINED
+top 10</textarea>
+    <div class="row">
+      <button class="btn primary" id="go" disabled>Loading Quackle…</button>
+      <span class="hint" id="load"></span>
+    </div>
+  </div>
+
+  <div class="card" id="out" hidden>
+    <h2>Quackle's view</h2>
+    <p class="verdict" id="verdict"></p>
+    <div class="moves-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Equity</th><th>Keeps</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="note">Equity is Quackle's estimate of a play's worth: its score plus the value of the tiles kept for the next turn, using Quackle's English leave values. This is Quackle's quick static evaluation, not its slower simulation.</p>
+  </div>
+</div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const COLS = 'ABCDEFGHIJKLMNO';
+let Q = null;
+
+function parsePlace(place) {
+  const m = /^(\d+)([A-O])$/i.exec(place), v = /^([A-O])(\d+)$/i.exec(place);
+  if (m) return { r: +m[1] - 1, c: COLS.indexOf(m[2].toUpperCase()), dr: 0, dc: 1 };
+  if (v) return { r: +v[2] - 1, c: COLS.indexOf(v[1].toUpperCase()), dr: 1, dc: 0 };
+  return null;
+}
+// Rebuild the board from the move lines so played-through letters can be shown.
+function boardFrom(lines) {
+  const B = Array.from({ length: 15 }, () => Array(15).fill(''));
+  for (const l of lines) {
+    const [cmd, , place, word] = l.trim().split(/\s+/);
+    if (cmd !== 'move') continue;
+    const p = parsePlace(place); if (!p) continue;
+    [...word].forEach((ch, i) => { if (ch !== '.') B[p.r + p.dr * i][p.c + p.dc * i] = ch; });
+  }
+  return B;
+}
+function fill(move, B) {
+  const p = parsePlace(move.place);
+  if (!p) return move.word;
+  return [...move.word].map((ch, i) => ch === '.' ? `<span class="thru">${B[p.r + p.dr * i][p.c + p.dc * i] || '.'}</span>` : ch).join('');
+}
+function leave(rack, tiles) {
+  const left = [...rack];
+  for (const ch of tiles) {
+    if (ch === '.') continue;
+    const want = /[a-z]/.test(ch) ? '?' : ch, i = left.indexOf(want);
+    if (i >= 0) left.splice(i, 1);
+  }
+  return left.join('') || '—';
+}
+
+async function load() {
+  const t0 = performance.now();
+  $('load').textContent = 'Downloading the engine and word list (about 26 MB the first time)…';
+  try {
+    const { default: createQuackle } = await import('./engine/quackle.js');
+    Q = await createQuackle({ locateFile: f => 'engine/' + f });
+    const init = Q.ccall('qk_init', 'number', [], []);
+    if (init < 0) throw new Error('word list missing');
+    $('load').textContent = `Ready in ${((performance.now() - t0) / 1000).toFixed(1)} s${init === 2 ? ' (no leave values found)' : ''}.`;
+    $('go').disabled = false; $('go').textContent = 'Analyse position';
+  } catch (e) {
+    $('load').textContent = 'The engine did not load. It is built separately; see quackle/README.md.';
+    $('go').textContent = 'Unavailable';
+  }
+}
+
+$('go').onclick = () => {
+  const text = $('input').value, lines = text.split('\n');
+  const t0 = performance.now();
+  const res = JSON.parse(Q.ccall('qk_analyse', 'string', ['string'], [text]));
+  const ms = Math.round(performance.now() - t0);
+  $('out').hidden = false;
+  if (!res.ok) { $('verdict').textContent = `Quackle couldn't set up this position: ${res.error}.`; $('rows').innerHTML = ''; return; }
+  const B = boardFrom(lines), best = res.moves[0];
+  const same = m => res.actual && m.place === res.actual.place && m.tiles === res.actual.tiles;
+  $('rows').innerHTML = res.moves.map((m, i) => `<tr class="${i === 0 ? 'best' : ''} ${same(m) ? 'played' : ''}">
+    <td>${i + 1}</td><td class="not">${m.place}</td><td class="word">${fill(m, B)}</td>
+    <td class="num">${m.score}</td><td class="num">${m.equity.toFixed(1)}</td><td class="not">${leave(res.rack, m.tiles)}</td></tr>`).join('');
+  let verdict = `Analysed in ${ms} ms with rack <b>${res.rack}</b>. Quackle's choice: <b>${best.place} ${fill(best, B)}</b> for ${best.score}.`;
+  if (res.actual) {
+    const a = res.actual;
+    if (res.actualValidity) verdict += ` The actual play ${a.place} ${a.word} isn't legal with this rack.`;
+    else if (res.actualRank === 0) verdict += ` The actual play matches it.`;
+    else verdict += ` The actual play, ${a.place} ${fill(a, B)} for ${a.score}, has equity ${a.equity.toFixed(1)}: ${(best.equity - a.equity).toFixed(1)} behind${res.actualRank > 0 ? ` (ranked ${res.actualRank + 1})` : ''}.`;
+  }
+  $('verdict').innerHTML = verdict;
+};
+load();
+</script>
+</body>
+</html>
