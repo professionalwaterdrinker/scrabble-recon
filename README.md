@@ -66,6 +66,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `data/words.txt` | ENABLE word list (public domain) plus a few common two-letter additions (QI, ZA, KI, OK, …) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and install metadata |
 | `tools/gen_sample.py` | Script that simulated the built-in sample game |
+| `tools/make-icons.ps1` | Redraws the PNG icons in `icons/` (Windows PowerShell) |
 
 ## Board text format
 

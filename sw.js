@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'tile-rewind-v2';
+const VERSION = 'tile-rewind-v3';
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,10 @@ const SHELL = [
   'data/words.txt',
   'manifest.webmanifest',
   'icons/icon.svg',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
+  'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', event => {
