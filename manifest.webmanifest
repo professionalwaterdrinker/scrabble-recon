@@ -1,6 +1,6 @@
 {
-  "name": "Tile Rewind",
-  "short_name": "Tile Rewind",
+  "name": "Mabble",
+  "short_name": "Mabble",
   "description": "Photograph a finished Scrabble board and rebuild the game move by move, with scores.",
   "start_url": "./",
   "scope": "./",

@@ -1,7 +1,7 @@
 /*
- *  Tile Rewind's bridge to the Quackle engine, compiled to WebAssembly.
+ *  Mabble's bridge to the Quackle engine, compiled to WebAssembly.
  *
- *  This file is part of Tile Rewind and, like Quackle, is free software:
+ *  This file is part of Mabble and, like Quackle, is free software:
  *  you can redistribute it and/or modify it under the terms of the GNU
  *  General Public License as published by the Free Software Foundation,
  *  either version 3 of the License, or (at your option) any later version.

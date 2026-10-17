@@ -1,4 +1,4 @@
-# Tile Rewind
+# Mabble
 
 Photograph a finished Scrabble board and get the game back, move by move.
 
@@ -56,7 +56,7 @@ All paths are relative, so the site works from a project subfolder like that.
 
 ### Installing it as an app
 
-Tile Rewind is a progressive web app: on a phone, open the site and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome). The app shell and word list are cached, so the editor, the solver and the on-device photo reader all work offline. Only the Claude API mode needs a connection. The service worker only runs over HTTPS, so it is skipped on `localhost`.
+Mabble is a progressive web app: on a phone, open the site and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome). The app shell and word list are cached, so the editor, the solver and the on-device photo reader all work offline. Only the Claude API mode needs a connection. The service worker only runs over HTTPS, so it is skipped on `localhost`.
 
 When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so installed copies pick up the update.
 
@@ -118,7 +118,7 @@ The **Practice** tab is an untimed game against yourself. It deals two racks fro
 
 ## Licence
 
-Tile Rewind is free software under the [GNU General Public License, version 3](LICENSE) or later, because it includes the Quackle engine (© Jason Katz-Brown, John O'Laughlin, John Fultz and contributors, GPLv3). The ENABLE word list is in the public domain.
+Mabble is free software under the [GNU General Public License, version 3](LICENSE) or later, because it includes the Quackle engine (© Jason Katz-Brown, John O'Laughlin, John Fultz and contributors, GPLv3). The ENABLE word list is in the public domain.
 
 ## Notes
 

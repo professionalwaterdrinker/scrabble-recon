@@ -38,10 +38,10 @@ function Write-Icon([int]$size, [string]$mode, [string]$path) {
   $g.FillPath($face, (New-RoundRect (104 * $s) (96 * $s) (304 * $s) (300 * $s) (40 * $s)))
   $center = New-Object System.Drawing.StringFormat
   $center.Alignment = 'Center'; $center.LineAlignment = 'Center'
-  $big = [System.Drawing.Font]::new('Arial Black', [single](200 * $s), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+  $big = [System.Drawing.Font]::new('Arial Black', [single](185 * $s), [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
   $small = [System.Drawing.Font]::new('Arial', [single](56 * $s), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-  $g.DrawString('R', $big, $ink, [System.Drawing.RectangleF]::new([single](104 * $s), [single](96 * $s), [single](284 * $s), [single](290 * $s)), $center)
-  $g.DrawString('1', $small, $ink, [System.Drawing.RectangleF]::new([single](336 * $s), [single](318 * $s), [single](64 * $s), [single](70 * $s)), $center)
+  $g.DrawString('M', $big, $ink, [System.Drawing.RectangleF]::new([single](104 * $s), [single](96 * $s), [single](284 * $s), [single](290 * $s)), $center)
+  $g.DrawString('3', $small, $ink, [System.Drawing.RectangleF]::new([single](336 * $s), [single](318 * $s), [single](64 * $s), [single](70 * $s)), $center)
   $g.Dispose()
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $bmp.Dispose()
