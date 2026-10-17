@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'tile-rewind-v3';
+const VERSION = 'tile-rewind-v4';
 const SHELL = [
   './',
   'index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   'js/app.js',
   'js/vision.js',
   'js/localreader.js',
+  'js/racks.js',
   'js/solver.js',
   'data/words.txt',
   'manifest.webmanifest',

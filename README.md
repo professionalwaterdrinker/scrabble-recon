@@ -7,7 +7,9 @@ Photograph a finished Scrabble board and get the game back, move by move.
 3. **Rebuild the game.** A solver works backwards from the final board, peeling off one legal play at a time so every earlier position is a valid board made of real words. It tries many orders and keeps the one that reads most like a real game.
 4. **Replay.** Step through the moves with standard notation (`8H`, `H8`), the words each move formed, scores with premium squares and 50-point bingos, and running totals per player.
 
-A finished board doesn't record the order of play, so the result is *one* order that fits every word. **Try another order** looks for a different one.
+5. **Racks.** For each move, the app shows what the player must have held. The tiles they played are certain. "At least n of these" groups show tiles that had to be on the rack already, because the player's later plays used more tiles than they drew in between. Once the bag runs out, everything they play later was already there. Anything else shows as "?". It also tracks the bag count, and when one player uses their last tile with the bag empty, it adds the standard end-of-game adjustment to the scores.
+
+A finished board doesn't record the order of play, so the result is *one* order that fits every word. **Try another order** looks for a different one. The rack deductions follow that order and assume a standard 100-tile set with no passes or exchanges.
 
 ## Running it
 
@@ -61,6 +63,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `css/style.css` | Styles, with light and dark themes |
 | `js/app.js` | Board editor, checks, scoring, replay |
 | `js/solver.js` | Web worker that reconstructs the move order |
+| `js/racks.js` | Works out each player's rack and the bag at every turn |
 | `js/localreader.js` | Free on-device photo reader: corner picker, perspective correction, tile detection, letter matching |
 | `js/vision.js` | Optional Claude API photo reader |
 | `data/words.txt` | ENABLE word list (public domain) plus a few common two-letter additions (QI, ZA, KI, OK, …) |
@@ -75,4 +78,4 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 ## Notes
 
 - Scrabble is a trademark of Hasbro in the US and Canada and of Mattel elsewhere. This project is not affiliated with either.
-- End-of-game rack penalties aren't visible on a board, so reconstructed totals can differ from the real score sheet. Scores assume Player 1 moved first.
+- Scores assume Player 1 moved first. The end-of-game adjustment is added only when the rebuilt game shows who used their last tile, so reconstructed totals can differ from the real score sheet.

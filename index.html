@@ -138,6 +138,16 @@
           <h2 id="replayTitle">Reconstructed game</h2>
           <div class="scores" id="scores"></div>
           <p class="note" id="replayMeta"></p>
+          <p class="note" id="endgame" hidden></p>
+        </div>
+        <div class="card">
+          <h2 id="rackTitle">Rack</h2>
+          <div class="rack" id="rack" aria-label="Tiles on the rack"></div>
+          <div class="rack-notes" id="rackNotes"></div>
+          <details>
+            <summary class="hint" style="cursor:pointer">How racks are worked out</summary>
+            <p class="note">Each player starts with 7 tiles and draws as many as they play. The tiles played on a turn were certainly on the rack. When later plays use more tiles than the player drew in between, the difference was already on the rack. Once the bag is empty, everything played later was already there. This assumes the rebuilt order is right and that nobody passed or exchanged tiles.</p>
+          </details>
         </div>
         <div class="card">
           <h2>Moves</h2>
@@ -151,7 +161,7 @@
             <button class="btn" id="anotherBtn">Try another order</button>
             <button class="btn" id="editBtn">Edit the board</button>
           </div>
-          <p class="note">This is one order of play that fits every word on the board. Others may fit too. Scores follow standard premium squares, count blanks as zero and add 50 for using all seven tiles. End-of-game rack penalties aren't visible on a board, so totals can differ from the score sheet.</p>
+          <p class="note">This is one order of play that fits every word on the board. Others may fit too. Scores follow standard premium squares, count blanks as zero and add 50 for using all seven tiles. The end-of-game adjustment is added only when the rebuilt game shows who used their last tile, so totals can differ from the score sheet.</p>
         </div>
       </div>
     </aside>

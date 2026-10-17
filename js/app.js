@@ -1,5 +1,6 @@
 import { readBoard, getKey, setKey } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
+import { deduceRacks } from './racks.js';
 
 (() => {
 const N = 15, CENTER = 112, COLS = 'ABCDEFGHIJKLMNO';
@@ -378,6 +379,7 @@ function onResult(m) {
     : 'No order fits with dictionary words at every stage, so earlier positions may include partial words. A misread tile is the usual cause.');
   S.fallback = null;
   S.moves = scoreMoves(m.moves);
+  S.racks = deduceRacks(S.moves, S.cells, S.blanks, S.players);
   S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note };
   solveStatus('');
   S.step = 1;
@@ -423,6 +425,71 @@ function scoreMoves(raw) {
   });
 }
 
+/* ---------- racks ---------- */
+const tileValue = t => t.ch === '?' ? 0 : VAL[t.ch];
+function rackTile(t, cls, title) {
+  const face = t.ch === '?' ? `<small>${t.as ? escapeHtml(t.as) : ''}</small>` : `${t.ch}<i>${VAL[t.ch]}</i>`;
+  return `<span class="rtile ${cls}" title="${escapeHtml(title)}">${face}</span>`;
+}
+const slot = (cls, title, text = '?') => `<span class="rtile ${cls}" title="${escapeHtml(title)}">${text}</span>`;
+const miniTiles = list => list.map(t => `<span class="mini">${t.ch === '?' ? '?' : t.ch}</span>`).join('');
+function moveSpan(list) {
+  const nums = [...new Set(list.map(t => t.move + 1))].sort((a, b) => a - b);
+  if (!nums.length) return '';
+  return nums.length === 1 ? `move ${nums[0]}` : nums.length === 2 ? `moves ${nums[0]} and ${nums[1]}` : `moves ${nums[0]}–${nums[nums.length - 1]}`;
+}
+const tileWord = n => `${n} tile${n === 1 ? '' : 's'}`;
+
+function renderRack() {
+  const R = S.racks;
+  if (!R || !R.racks.length) return;
+  const g = Math.max(0, S.step - 1), r = R.racks[g];
+  $('rackTitle').innerHTML = `Rack <span class="n">Player ${r.player + 1}, before move ${g + 1}</span>`;
+  const html = [];
+  r.played.forEach(t => html.push(rackTile(t, 'played', 'Played on this move')));
+  r.kept.forEach(t => html.push(rackTile(t, 'kept', `Already held, played on move ${t.move + 1}`)));
+  if (r.group) for (let i = 0; i < r.group.need; i++) html.push(slot('group', 'One of the tiles listed below'));
+  r.left.forEach(t => html.push(rackTile(t, 'left', 'Still on the rack when the game ended')));
+  if (r.leftGroup) for (let i = 0; i < r.leftGroup.need; i++) html.push(slot('group', 'One of the tiles left at the end'));
+  for (let i = 0; i < r.unknown + r.leftUnknown; i++) html.push(slot('unknown', 'Unknown tile'));
+  $('rack').innerHTML = html.join('');
+
+  const notes = [];
+  const item = (swatch, text) => notes.push(`<div class="rnote"><span class="rtile mini-sw ${swatch}"></span><div>${text}</div></div>`);
+  item('played', `Played this move: ${miniTiles(r.played)}`);
+  if (r.kept.length) item('kept', `Already on the rack, played later on ${moveSpan(r.kept)}.`);
+  if (r.group) item('group', `At least ${tileWord(r.group.need)} from these, played on ${moveSpan(r.group.from)}: ${miniTiles(r.group.from)}`);
+  if (r.left.length) item('left', 'Still on the rack when the game ended.');
+  if (r.leftGroup) item('group', `At least ${tileWord(r.leftGroup.need)} of the tiles left at the end: ${miniTiles(r.leftGroup.from)}`);
+  const unk = r.unknown + r.leftUnknown;
+  if (unk) item('unknown', `${tileWord(unk)} can't be identified from the board.`);
+  notes.push(`<p class="note">Bag before this move: ${tileWord(r.bagBefore)}. ${r.bagBefore ? `Player ${r.player + 1} then drew ${r.drew}.` : 'The bag is empty, so nothing new is drawn.'}</p>`);
+  if (r.over) notes.push('<p class="note">This move uses more tiles than the player could have held, so the rebuilt order is probably wrong here. Try another order.</p>');
+  $('rackNotes').innerHTML = notes.join('');
+}
+
+// Standard ending: the player who goes out gains the value of every other rack; the others lose theirs.
+function endgameAdjust() {
+  const e = S.racks && S.racks.endgame;
+  if (!e) return null;
+  const delta = Array(S.players).fill(0);
+  e.left.forEach((tiles, p) => { const v = tiles.reduce((s, t) => s + tileValue(t), 0); delta[p] -= v; delta[e.out] += v; });
+  return { ...e, delta };
+}
+function renderEndgame(adj) {
+  const el = $('endgame'), R = S.racks;
+  if (!R) { el.hidden = true; return; }
+  if (adj) {
+    const others = adj.left.map((t, p) => t.length ? `Player ${p + 1} was left with ${miniTiles(t)} (−${-adj.delta[p]})` : '').filter(Boolean);
+    el.innerHTML = `End of game: Player ${adj.out + 1} used their last tile${others.length ? `. ${others.join('; ')}, so Player ${adj.out + 1} gets +${adj.delta[adj.out]}` : ''}. The final scores include this.`;
+  } else if (R.bagEnd > 0) {
+    el.textContent = `The bag would still hold ${tileWord(R.bagEnd)}, so the game wasn't finished when the photo was taken (or tiles were exchanged). No end-of-game adjustment is applied.`;
+  } else {
+    el.textContent = 'The bag ran out, but no player used their last tile in the rebuilt order, so the end-of-game adjustment is left out.';
+  }
+  el.hidden = false;
+}
+
 /* ---------- replay ---------- */
 function wordHtml(pos, placed) {
   return pos.map(i => {
@@ -436,10 +503,17 @@ function renderReplay() {
   const now = Array(S.players).fill(0);
   for (let k = 0; k < S.step; k++) now[mv[k].player] += mv[k].score;
   const fin = Array(S.players).fill(0); mv.forEach(m => fin[m.player] += m.score);
+  const adj = endgameAdjust();
   const nextP = S.step < n ? mv[S.step].player : -1;
-  $('scores').innerHTML = now.map((v, p) => `<div class="pl ${p === nextP ? 'turn' : ''}"><div class="who">Player ${p + 1}${p === nextP ? ' · to play' : ''}</div><div class="pts">${v}</div><div class="fin">final ${fin[p]}</div></div>`).join('');
+  $('scores').innerHTML = now.map((v, p) => {
+    const a = adj ? adj.delta[p] : 0;
+    const finText = a ? `final ${fin[p] + a} <span title="End-of-game tiles">(${a > 0 ? '+' : '−'}${Math.abs(a)})</span>` : `final ${fin[p]}`;
+    return `<div class="pl ${p === nextP ? 'turn' : ''}"><div class="who">Player ${p + 1}${p === nextP ? ' · to play' : ''}</div><div class="pts">${v + (S.step === n ? a : 0)}</div><div class="fin">${finText}</div></div>`;
+  }).join('');
   const tiles = S.cells.filter(Boolean).length;
   $('replayMeta').textContent = `${n} moves, ${tiles} tiles, ${mv.filter(m => m.bingo).length} using all seven tiles. Player 1 is assumed to have moved first. Found in ${(S.meta.ms / 1000).toFixed(1)} s. ${S.meta.note}`;
+  renderEndgame(adj);
+  renderRack();
   $('moveRows').innerHTML = mv.map((m, k) => {
     const cross = m.words.slice(m.words[0] === m.main ? 1 : 0);
     const crossHtml = cross.length ? `<div class="cross">+ ${cross.map(w => w.map(i => S.cells[i]).join('')).join(', ')}</div>` : '';
