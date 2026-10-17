@@ -15,8 +15,12 @@
  *    move <player> <place> <word>    e.g. "move 0 8H CAT", "move 1 H7 .AT"
  *                                    '.' = tile already on the board,
  *                                    lowercase = blank
+ *    hold <player> <letters>         optional: what another player is holding,
+ *                                    so Quackle's bag matches the real one
  *    rack <player> <letters>         rack to analyse, '?' = blank
  *    actual <place> <word>           optional: the play that was really made
+ *    actual exchange <letters>       ... or the tiles exchanged
+ *    actual pass                     ... or a pass
  *    top <n>                         how many plays to return
  */
 
@@ -147,6 +151,7 @@ const char *qk_analyse(const char *input)
 	int playerCount = 2, top = 10, rackPlayer = -1;
 	struct Placed { int player; std::string place, word; };
 	std::vector<Placed> moves;
+	std::vector<std::pair<int, std::string>> holds;
 	std::string rackText, actualPlace, actualWord;
 
 	std::istringstream in(input);
@@ -160,6 +165,7 @@ const char *qk_analyse(const char *input)
 		else if (cmd == "top") ls >> top;
 		else if (cmd == "move") { Placed p; ls >> p.player >> p.place >> p.word; moves.push_back(p); }
 		else if (cmd == "rack") ls >> rackPlayer >> rackText;
+		else if (cmd == "hold") { int p = -1; std::string t; ls >> p >> t; if (p >= 0 && !t.empty()) holds.push_back({ p, t }); }
 		else if (cmd == "actual") ls >> actualPlace >> actualWord;
 	}
 	if (playerCount < 2 || playerCount > 4) return fail("players must be 2 to 4").c_str();
@@ -190,6 +196,9 @@ const char *qk_analyse(const char *input)
 
 	GamePosition &pos = game.currentPosition();
 	emptyRacks(pos, playerCount);
+	for (const auto &h : holds)
+		if (h.first != rackPlayer && h.first < playerCount)
+			pos.setPlayerRack(h.first, Rack(QUACKLE_ALPHABET_PARAMETERS->encode(h.second)), true);
 	pos.setCurrentPlayer(rackPlayer);
 	pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(rackText)));
 	pos.kibitz(top);
@@ -203,9 +212,11 @@ const char *qk_analyse(const char *input)
 
 	if (!actualPlace.empty())
 	{
-		Move a = Move::createPlaceMove(actualPlace, QUACKLE_ALPHABET_PARAMETERS->encode(actualWord));
+		Move a = actualPlace == "exchange" ? Move::createExchangeMove(QUACKLE_ALPHABET_PARAMETERS->encode(actualWord), false)
+			: actualPlace == "pass" ? Move::createPassMove()
+			: Move::createPlaceMove(actualPlace, QUACKLE_ALPHABET_PARAMETERS->encode(actualWord));
 		const int validity = pos.validateMove(a);
-		pos.scoreMove(a);
+		if (a.action == Move::Place) pos.scoreMove(a);
 		a.equity = pos.calculateEquity(a);
 		int rank = -1;
 		for (size_t i = 0; i < list.size(); ++i)
