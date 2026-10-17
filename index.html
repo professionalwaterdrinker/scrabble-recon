@@ -154,11 +154,18 @@
           <p class="note" id="replayMeta"></p>
           <p class="note" id="endgame" hidden></p>
         </div>
+        <div class="card" id="qkCard">
+          <h2 id="qkTitle">Move analysis</h2>
+          <div id="qkBody">
+            <p class="hint">Compare every move with the choice of Quackle, an open-source Scrabble engine that runs in this browser. It downloads about 26 MB the first time.</p>
+            <div class="row"><button class="btn primary" id="qkLoad">Load Quackle</button></div>
+          </div>
+        </div>
         <div class="card">
           <h2>Moves</h2>
           <div class="moves-wrap" id="movesWrap">
             <table>
-              <thead><tr><th>#</th><th>Player</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Total</th></tr></thead>
+              <thead><tr><th>#</th><th>Player</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Total</th><th class="num qk-col" hidden title="Equity given up compared with Quackle's best play">vs Quackle</th></tr></thead>
               <tbody id="moveRows"></tbody>
             </table>
           </div>

@@ -151,11 +151,15 @@ function buildBoard() {
 }
 const STAR = '<svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 20.9l1.6-7L2 9.2l7.1-.6z"/></svg>';
 function renderBoard() {
-  let show, hot = new Set(), bad = new Set();
+  let show, hot = new Set(), bad = new Set(), ghost = null;
   if (S.mode === 'replay' && S.moves) {
     show = new Set();
-    for (let k = 0; k < S.step; k++) S.moves[k].tiles.forEach(i => show.add(i));
-    if (S.step > 0) S.moves[S.step - 1].tiles.forEach(i => hot.add(i));
+    // previewing a Quackle suggestion: the board before the move, with the suggestion on it
+    const pv = S.preview && S.preview.g === S.step - 1 ? S.preview : null;
+    const upTo = pv ? S.step - 1 : S.step;
+    for (let k = 0; k < upTo; k++) S.moves[k].tiles.forEach(i => show.add(i));
+    if (pv) ghost = pv.tiles;
+    else if (S.step > 0) S.moves[S.step - 1].tiles.forEach(i => hot.add(i));
   } else if (DICT) {
     analyse().invalid.forEach(r => r.pos.forEach(i => bad.add(i)));
   }
@@ -164,13 +168,16 @@ function renderBoard() {
     const el = cellEls[i], ch = S.cells[i];
     const visible = ch && (!show || show.has(i));
     let html = '';
-    if (visible) {
+    if (ghost && ghost.has(i)) {
+      const t = ghost.get(i);
+      html = `<div class="tile suggest${t.blank ? ' blank' : ''}"><b>${t.ch}</b>${t.blank ? '' : `<i>${VAL[t.ch]}</i>`}</div>`;
+    } else if (visible) {
       const blank = S.blanks.has(i);
       const cls = ['tile', blank && 'blank', hot.has(i) && 'new', bad.has(i) && 'bad', S.mode === 'setup' && S.unsure.has(i) && 'unsure'].filter(Boolean).join(' ');
       html = `<div class="${cls}"><b>${ch}</b>${blank ? '' : `<i>${VAL[ch]}</i>`}</div>`;
     } else if (i === CENTER) html = STAR;
     else if (PREM[i]) html = `<span class="prem">${PREM[i].toUpperCase()}</span>`;
-    const key = html + (hot.has(i) ? S.step : '');
+    const key = html + (hot.has(i) ? S.step : '') + (ghost && ghost.has(i) ? 'g' : '');
     if (el._k !== key) { el.innerHTML = html; el._k = key; }
     el.classList.toggle('sel', S.mode === 'setup' && i === S.sel && document.activeElement === kbd);
     el.classList.toggle('dir0', S.dir === 0); el.classList.toggle('dir1', S.dir === 1);
@@ -381,10 +388,12 @@ function onResult(m) {
   S.moves = scoreMoves(m.moves);
   S.racks = deduceRacks(S.moves, S.cells, S.blanks, S.players);
   S.est = estimateRacks(S.moves, S.cells, S.blanks, S.players, S.racks);
+  S.preview = null; QK.results = {}; QK.token = null;
   S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note };
   solveStatus('');
   S.step = 1;
   setMode('replay');
+  if (QK.state === 'ready') qkRunAll();
 }
 $('solveBtn').onclick = () => { S.seed = 0; S.players = +$('players').value; runSolve(); };
 $('anotherBtn').onclick = () => { S.seed = (S.seed || 0) + 1 + Math.floor(Math.random() * 1000); setMode('setup'); runSolve(); };
@@ -480,6 +489,179 @@ function renderEndgame(adj) {
   el.hidden = false;
 }
 
+/* ---------- Quackle move analysis ---------- */
+// The engine runs in a worker and is only downloaded when asked for.
+const QK = { state: 'idle', worker: null, results: {}, pending: new Map(), nextId: 1, token: null, leaves: true, error: '' };
+
+// A reconstructed move in Quackle's notation: '.' for letters already down, lowercase for blanks.
+function qkMoveLine(m) {
+  const pos = m.main.length >= 2 ? m.main : m.words[0];
+  const dir = m.main.length >= 2 ? m.dir : 1 - m.dir;
+  const word = pos.map(i => m.placed.has(i) ? (S.blanks.has(i) ? S.cells[i].toLowerCase() : S.cells[i]) : '.').join('');
+  return { player: m.player, place: notation(pos[0], dir), word };
+}
+// The mover's best-estimate rack; tiles that can't be named are left out.
+function qkRack(g) {
+  const st = S.est.at(g + 1).find(s => s.mode === 'played');
+  const known = st ? st.tiles.filter(r => !r.tile.unknown) : [];
+  return {
+    letters: known.map(r => r.tile.ch).join(''), tiles: known,
+    certain: known.filter(r => r.certain).length, likely: known.filter(r => !r.certain).length,
+    unknown: st ? st.tiles.length - known.length : 0,
+  };
+}
+function qkInput(g, rack) {
+  const lines = ['players ' + S.players];
+  for (let k = 0; k < g; k++) { const l = qkMoveLine(S.moves[k]); lines.push(`move ${l.player} ${l.place} ${l.word}`); }
+  const a = qkMoveLine(S.moves[g]);
+  lines.push(`rack ${a.player} ${rack.letters}`, `actual ${a.place} ${a.word}`, 'top 6');
+  return lines.join('\n');
+}
+function qkCall(input) {
+  return new Promise(res => { const id = QK.nextId++; QK.pending.set(id, res); QK.worker.postMessage({ type: 'analyse', id, input }); });
+}
+function qkLoad() {
+  QK.state = 'loading'; QK.error = ''; renderAnalysis();
+  try { QK.worker = new Worker('js/quackle-worker.js', { type: 'module' }); }
+  catch (e) { QK.state = 'error'; QK.error = 'This browser cannot run the engine.'; renderAnalysis(); return; }
+  QK.worker.onmessage = e => {
+    const m = e.data;
+    if (m.type === 'ready') { QK.state = 'ready'; QK.leaves = m.leaves; qkRunAll(); }
+    else if (m.type === 'error') { QK.state = 'error'; QK.error = m.message; renderAnalysis(); }
+    else if (m.type === 'result') { const r = QK.pending.get(m.id); QK.pending.delete(m.id); if (r) r(m.result); }
+  };
+  QK.worker.onerror = () => { QK.state = 'error'; QK.error = 'The engine could not be downloaded. Check your connection and try again.'; renderAnalysis(); };
+  QK.worker.postMessage({ type: 'load' });
+}
+// Analyse every move: the one on screen first, then the rest in order.
+async function qkRunAll() {
+  if (QK.state !== 'ready' || !S.moves) return;
+  const token = QK.token = {};
+  QK.results = {};
+  renderReplay();
+  const cur = Math.max(0, S.step - 1);
+  const order = [cur, ...[...S.moves.keys()].filter(g => g !== cur)];
+  for (const g of order) {
+    const rack = qkRack(g);
+    const res = await qkCall(qkInput(g, rack));
+    if (QK.token !== token) return;
+    let loss = null;
+    if (res.ok && res.moves.length && res.actual) loss = res.actualRank === 0 ? 0 : Math.max(0, res.moves[0].equity - res.actual.equity);
+    QK.results[g] = { ...res, rackInfo: rack, loss };
+    const done = Object.keys(QK.results).length;
+    if (g === Math.max(0, S.step - 1) || done % 6 === 0 || done === S.moves.length) renderReplay();
+  }
+}
+function qkCell(k) {
+  if (QK.state !== 'ready') return '';
+  const r = QK.results[k];
+  if (!r) return '<td class="num qk">…</td>';
+  if (r.loss === null) return '<td class="num qk">–</td>';
+  return r.loss < 0.05 ? '<td class="num qk best" title="Quackle\'s top play">✓</td>' : `<td class="num qk" title="Equity given up">−${r.loss.toFixed(1)}</td>`;
+}
+// Squares a suggested play covers, for previewing it on the board.
+function qkTiles(move) {
+  const COLS_ = 'ABCDEFGHIJKLMNO';
+  const h = /^(\d+)([A-O])$/i.exec(move.place), v = /^([A-O])(\d+)$/i.exec(move.place);
+  if (!h && !v) return null;
+  const r0 = h ? +h[1] - 1 : +v[2] - 1, c0 = COLS_.indexOf((h ? h[2] : v[1]).toUpperCase()), dr = h ? 0 : 1, dc = h ? 1 : 0;
+  const out = [];
+  [...move.tiles].forEach((ch, k) => {
+    const i = (r0 + dr * k) * N + c0 + dc * k;
+    out.push({ i, ch: ch === '.' ? S.cells[i] : ch.toUpperCase(), blank: ch !== '.' && ch !== ch.toUpperCase(), thru: ch === '.' });
+  });
+  return out;
+}
+function qkWord(move) {
+  if (move.action === 'exchange') return `Exchange ${escapeHtml(move.tiles)}`;
+  if (move.action === 'pass') return 'Pass';
+  const t = qkTiles(move);
+  if (!t) return escapeHtml(move.word);
+  return t.map(x => x.thru ? `<span class="thru">${x.ch}</span>` : x.blank ? `<span class="bl">${x.ch.toLowerCase()}</span>` : x.ch).join('');
+}
+function qkLeave(rack, tiles) {
+  const left = [...rack];
+  for (const ch of tiles) {
+    if (ch === '.') continue;
+    const want = ch !== ch.toUpperCase() ? '?' : ch, i = left.indexOf(want);
+    if (i >= 0) left.splice(i, 1);
+  }
+  return left.join('') || '–';
+}
+const sameMove = (a, b) => a && b && a.place === b.place && a.tiles === b.tiles;
+
+function renderAnalysis() {
+  const body = $('qkBody'), title = $('qkTitle');
+  if (!body) return;
+  $('replay').querySelectorAll('.qk-col').forEach(el => { el.hidden = QK.state !== 'ready'; });
+  if (QK.state === 'idle') { title.textContent = 'Move analysis'; return; }
+  if (QK.state === 'loading') {
+    title.textContent = 'Move analysis';
+    body.innerHTML = '<p class="status"><span class="spinner"></span>Loading Quackle and its word list…</p>';
+    return;
+  }
+  if (QK.state === 'error') {
+    body.innerHTML = `<p class="status err">${escapeHtml(QK.error)}</p><div class="row"><button class="btn" id="qkLoad">Try again</button></div>`;
+    return;
+  }
+  // ready
+  const lost = Array(S.players).fill(0), counted = Array(S.players).fill(0);
+  Object.entries(QK.results).forEach(([g, r]) => { if (r.loss !== null) { const p = S.moves[g].player; lost[p] += r.loss; counted[p]++; } });
+  const summary = counted.some(Boolean)
+    ? `<p class="note">Equity given up across analysed moves (lower is better): ${lost.map((v, p) => `Player ${p + 1} <b>${v.toFixed(1)}</b> over ${counted[p]}`).join(' · ')}.</p>` : '';
+  if (S.step === 0) {
+    title.textContent = 'Move analysis';
+    body.innerHTML = `<p class="hint">Step to a move to see Quackle's view of it.</p>${summary}`;
+    return;
+  }
+  const g = S.step - 1, m = S.moves[g], r = QK.results[g];
+  title.innerHTML = `Move analysis <span class="n">Move ${g + 1}, Player ${m.player + 1}</span>`;
+  if (!r) { body.innerHTML = `<p class="status"><span class="spinner"></span>Analysing this move…</p>${summary}`; return; }
+  if (!r.ok) { body.innerHTML = `<p class="status err">Quackle couldn't set up this position: ${escapeHtml(r.error)}.</p>${summary}`; return; }
+  const ri = r.rackInfo;
+  const rackHtml = ri.tiles.map(t => `<span class="mini${t.certain ? '' : ' likely'}" title="${t.certain ? 'Certain' : Math.round(t.prob * 100) + '% likely'}">${t.tile.ch}</span>`).join('');
+  const best = r.moves[0];
+  let verdict;
+  if (!best) verdict = 'Quackle found no plays for this rack.';
+  else if (r.loss !== null && r.loss < 0.05) verdict = `<b>Matches Quackle's top play.</b>`;
+  else if (r.loss !== null && r.loss < 3) verdict = `Close to Quackle's choice, <b>${best.place} ${qkWord(best)}</b> for ${best.score}: ${r.loss.toFixed(1)} equity behind.`;
+  else verdict = `Quackle prefers <b>${best.place} ${qkWord(best)}</b> for ${best.score}: ${r.loss.toFixed(1)} more equity than the play made.`;
+  const rows = r.moves.map((mv, k) => {
+    const isActual = sameMove(mv, r.actual), on = S.preview && S.preview.key === `${g}:${k}`;
+    return `<tr class="qkrow ${isActual ? 'played' : ''} ${on ? 'cur' : ''}" data-k="${k}"><td>${k + 1}</td><td class="not">${mv.place || '–'}</td><td><span class="word">${qkWord(mv)}</span>${isActual ? ' <span class="badge">played</span>' : ''}</td><td class="num">${mv.score}</td><td class="num">${mv.equity.toFixed(1)}</td><td class="not">${qkLeave(r.rack, mv.tiles)}</td></tr>`;
+  });
+  if (r.actual && !r.moves.some(mv => sameMove(mv, r.actual))) {
+    const a = r.actual, on = S.preview && S.preview.key === `${g}:a`;
+    rows.push(`<tr class="qkrow played ${on ? 'cur' : ''}" data-k="a"><td>–</td><td class="not">${a.place}</td><td><span class="word">${qkWord(a)}</span> <span class="badge">played</span></td><td class="num">${a.score}</td><td class="num">${a.equity.toFixed(1)}</td><td class="not">${qkLeave(r.rack, a.tiles)}</td></tr>`);
+  }
+  const approx = ri.likely || ri.unknown
+    ? `Based on the best-estimate rack: ${ri.certain} certain, ${ri.likely} likely${ri.unknown ? `, ${ri.unknown} unknown and left out` : ''}. A different rack could change Quackle's choice.`
+    : 'The whole rack is certain, so this is exact.';
+  body.innerHTML = `
+    <p class="qk-rack">Rack ${rackHtml}</p>
+    <p class="verdict">${verdict}</p>
+    <div class="moves-wrap qk-table"><table>
+      <thead><tr><th>#</th><th>Where</th><th>Word</th><th class="num">Pts</th><th class="num">Equity</th><th>Keeps</th></tr></thead>
+      <tbody>${rows.join('')}</tbody></table></div>
+    <p class="note">${approx} Click a play to see it on the board. Equity is the score plus Quackle's value for the tiles kept${QK.leaves ? '' : ' (leave values unavailable)'}.</p>
+    ${summary}`;
+}
+$('qkCard').addEventListener('click', e => {
+  if (e.target.closest('#qkLoad')) { qkLoad(); return; }
+  const tr = e.target.closest('tr.qkrow');
+  if (!tr || !S.moves) return;
+  const g = S.step - 1, r = QK.results[g];
+  if (!r) return;
+  const key = `${g}:${tr.dataset.k}`;
+  if (S.preview && S.preview.key === key) S.preview = null;
+  else {
+    const mv = tr.dataset.k === 'a' ? r.actual : r.moves[+tr.dataset.k];
+    const t = mv && qkTiles(mv);
+    S.preview = t ? { g, key, tiles: new Map(t.filter(x => !x.thru).map(x => [x.i, x])) } : null;
+  }
+  stopPlay(); renderAnalysis(); renderBoard();
+});
+
 /* ---------- replay ---------- */
 function wordHtml(pos, placed) {
   return pos.map(i => {
@@ -504,6 +686,7 @@ function renderReplay() {
   $('replayMeta').textContent = `${n} moves, ${tiles} tiles, ${mv.filter(m => m.bingo).length} using all seven tiles. Player 1 is assumed to have moved first. Found in ${(S.meta.ms / 1000).toFixed(1)} s. ${S.meta.note}`;
   renderEndgame(adj);
   renderShelves();
+  renderAnalysis();
   $('moveRows').innerHTML = mv.map((m, k) => {
     const cross = m.words.slice(m.words[0] === m.main ? 1 : 0);
     const crossHtml = cross.length ? `<div class="cross">+ ${cross.map(w => w.map(i => S.cells[i]).join('')).join(', ')}</div>` : '';
@@ -511,7 +694,7 @@ function renderReplay() {
     return `<tr class="mv ${k === S.step - 1 ? 'cur' : ''} ${k >= S.step ? 'future' : ''}" data-k="${k}">
       <td>${k + 1}</td><td>P${m.player + 1}</td><td class="not">${notation(mainPos[0], m.main.length >= 2 ? m.dir : 1 - m.dir)}</td>
       <td><span class="word">${wordHtml(mainPos, m.placed)}</span>${m.bingo ? '<span class="bingo">BINGO</span>' : ''}${crossHtml}</td>
-      <td class="num">${m.score}</td><td class="num">${m.total}</td></tr>`;
+      <td class="num">${m.score}</td><td class="num">${m.total}</td>${qkCell(k)}</tr>`;
   }).join('');
   $('tSlider').max = n; $('tSlider').value = S.step;
   $('tNum').textContent = `${S.step} / ${n}`;
@@ -524,7 +707,7 @@ function renderReplay() {
     else if (bottom > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = bottom - wrap.clientHeight;
   }
 }
-function goto(k) { S.step = Math.max(0, Math.min(S.moves.length, k)); renderReplay(); renderBoard(); }
+function goto(k) { if (!S.moves) return; S.step = Math.max(0, Math.min(S.moves.length, k)); S.preview = null; renderReplay(); renderBoard(); }
 $('moveRows').addEventListener('click', e => { const tr = e.target.closest('tr.mv'); if (tr) { stopPlay(); goto(+tr.dataset.k + 1); } });
 $('tFirst').onclick = () => { stopPlay(); goto(0); };
 $('tPrev').onclick = () => { stopPlay(); goto(S.step - 1); };

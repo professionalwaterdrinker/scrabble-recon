@@ -76,6 +76,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `tools/gen_sample.py` | Script that simulated the built-in sample game |
 | `tools/make-icons.ps1` | Redraws the PNG icons in `icons/` (Windows PowerShell) |
 | `quackle/` | Bridge and build script for the Quackle engine (WebAssembly) |
+| `js/quackle-worker.js` | Runs the Quackle engine in a background worker |
 | `quackle-test.html` | Test bench for Quackle move analysis |
 | `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
 
@@ -83,9 +84,15 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 
 **Edit as text** and **Copy as text** use 15 lines of 15 characters: an uppercase letter is a tile, a lowercase letter is a blank, and `.` is an empty square.
 
-## Move analysis with Quackle (proof of concept)
+## Move analysis with Quackle
 
-[Quackle](https://github.com/quackle/quackle), the open-source crossword-game AI, is compiled to WebAssembly so it can analyse positions in the browser. `quackle-test.html` is a test bench: it replays a position, asks Quackle for its best plays with a given rack, and compares them with the play that was made. See [`quackle/README.md`](quackle/README.md) for how the engine is built. It isn't wired into the main app yet. Move analysis will only be as reliable as the rack it's given, and racks reconstructed from a photo are partly estimated.
+[Quackle](https://github.com/quackle/quackle), the open-source crossword-game AI, is compiled to WebAssembly so it can analyse moves in the browser. In the replay, **Load Quackle** downloads the engine and word list (about 26 MB, cached after the first time). The app then analyses every move in a background worker, using the mover's best-estimate rack:
+
+- **The move list** gains a "vs Quackle" column: ✓ where the play was Quackle's top choice, otherwise the equity given up.
+- **The analysis card** shows Quackle's top plays for the current move next to the actual play, with score, equity and the tiles each play keeps. Click a play to preview it on the board.
+- **A summary** gives each player's total equity given up.
+
+Analysis is only as reliable as the rack. When the rack includes likely (not certain) tiles, the card says so, and unknown tiles are left out. The engine uses Quackle's quick static evaluation (score plus leave value), not its slower simulation. `quackle-test.html` is a test bench for trying single positions by hand. See [`quackle/README.md`](quackle/README.md) for how the engine is built.
 
 ## Licence
 

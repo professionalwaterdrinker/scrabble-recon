@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'tile-rewind-v5';
+const VERSION = 'tile-rewind-v6';
 const SHELL = [
   './',
   'index.html',
@@ -9,6 +9,7 @@ const SHELL = [
   'js/vision.js',
   'js/localreader.js',
   'js/racks.js',
+  'js/quackle-worker.js',
   'js/solver.js',
   'data/words.txt',
   'manifest.webmanifest',
@@ -38,6 +39,9 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     caches.open(VERSION).then(async cache => {
       const cached = await cache.match(event.request, { ignoreSearch: true });
+      // The Quackle engine is large (about 26 MB) and rarely changes: once stored, serve it
+      // from the cache without refreshing. Bumping VERSION clears it.
+      if (cached && url.pathname.includes('/engine/')) return cached;
       const fresh = fetch(event.request)
         .then(res => { if (res.ok) cache.put(event.request, res.clone()); return res; })
         .catch(() => cached);
