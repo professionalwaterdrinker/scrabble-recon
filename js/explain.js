@@ -109,6 +109,8 @@ export function moveFacts(mv, { cellsBefore, PREM, replies, label }) {
     play: label(mv), score: mv.score, equity: +mv.equity.toFixed(1),
     leaveValue: mv.leaveValue != null ? +mv.leaveValue.toFixed(1) : null,
     boardValue: mv.board != null ? +mv.board.toFixed(1) : null,
+    // what's left of the equity: Quackle's opening-move placement bonus
+    placementValue: mv.leaveValue != null && mv.board != null ? +(mv.equity - mv.score - mv.leaveValue - mv.board).toFixed(1) : 0,
     leave: leaveFacts(mv.leave),
     board: mv.action === 'place' ? boardFacts(cellsBefore, mv, PREM) : null,
     replies: replies ? replyFacts(replies, label) : null,
@@ -132,26 +134,36 @@ export function checklist(top, mine) {
   if (top.leave.blanks > mine.leave.blanks) why.push('Keeps the blank for a bigger play later.');
   if (top.leave.bingoFriendly - mine.leave.bingoFriendly >= 2 && top.leave.size >= 3) why.push('Keeps more bingo-friendly letters (A, E, I, L, N, R, S, T).');
   if (dBoard > 1.5) why.push('Quackle rates its effect on the board as safer.');
-  if (top.replies && mine.replies) {
-    const dAvg = mine.replies.average - top.replies.average;
-    if (dAvg > 2) why.push(`Leaves the opponent less to work with: their best reply averages ${top.replies.average.toFixed(0)} points, against ${mine.replies.average.toFixed(0)} after your play.`);
+  if (top.placementValue - mine.placementValue > 1) why.push('Places the opening word more safely, keeping vowels away from the squares the opponent can use for big scores.');
+  const tr = top.replies, mr = mine.replies;
+  if (tr && mr) {
+    const dAvg = mr.average - tr.average;
+    if (dAvg > 2) why.push(`Leaves the opponent less to work with: their best reply averages ${tr.average.toFixed(0)} points, against ${mr.average.toFixed(0)} after your play.`);
+    // be honest when Quackle's play is the riskier one
+    else if (dAvg < -2) why.push(`It does give the opponent more to work with (their best reply averages ${tr.average.toFixed(0)} against ${mr.average.toFixed(0)} after yours), but the gains above outweigh that.`);
   }
   if (top.board && mine.board && top.board.bingoLinesAfter < mine.board.bingoLinesAfter) why.push('Leaves fewer open lines for a bingo.');
 
-  if (mine.leave.qWithoutU) weak.push('Keeps the Q without a U, which is hard to play.');
-  if (mine.leave.duplicates.length) weak.push(`Keeps duplicate letters (${mine.leave.duplicates.join(', ')}), which limit your next rack.`);
-  if (mine.leave.balance !== 'balanced' && mine.leave.balance !== 'small') weak.push(`Leaves a ${mine.leave.balance} rack (${mine.leave.tiles}).`);
+  // weak points only count when Quackle's play doesn't share them
+  const tl = top.leave, ml = mine.leave;
+  if (ml.qWithoutU && !tl.qWithoutU) weak.push('Keeps the Q without a U, which is hard to play.');
+  if (ml.duplicates.length && ml.duplicates.join() !== tl.duplicates.join()) weak.push(`Keeps duplicate letters (${ml.duplicates.join(', ')}), which limit your next rack.`);
+  if (ml.balance !== 'balanced' && ml.balance !== 'small' && ml.balance !== tl.balance) weak.push(`Leaves a ${ml.balance} rack (${ml.tiles}).`);
+  if (mine.kind === 'pass') weak.unshift('Passing scores nothing and keeps exactly the same tiles.');
+  else if (mine.kind === 'exchange') weak.unshift(`Exchanging scores nothing this turn, while Quackle found ${top.score} points.`);
+  else if (ml.size >= 4 && tl.size < ml.size && dScore >= 10) weak.push(`Plays only ${7 - ml.size} tile${7 - ml.size === 1 ? '' : 's'}, keeping ${ml.size} that don't fit together as well as Quackle's leave.`);
   if (mine.board) {
+    const count = (b, kind) => b ? b.opened.filter(o => o.kind === kind).length : 0;
     const tw = mine.board.opened.filter(o => o.kind === 'tw'), dw = mine.board.opened.filter(o => o.kind === 'dw');
-    if (tw.length && (!top.board || tw.length > top.board.opened.filter(o => o.kind === 'tw').length)) weak.push(`Opens the triple-word square${tw.length > 1 ? 's' : ''} at ${tw.map(o => o.square).join(', ')}.`);
-    if (dw.length >= 2 && (!top.board || dw.length > top.board.opened.filter(o => o.kind === 'dw').length)) weak.push(`Opens double-word squares at ${dw.map(o => o.square).join(', ')}.`);
-    if (mine.board.bingoLinesAfter > mine.board.bingoLinesBefore) weak.push('Opens a new line where the opponent could bingo.');
+    if (tw.length > count(top.board, 'tw')) weak.push(`Opens the triple-word square${tw.length > 1 ? 's' : ''} at ${tw.map(o => o.square).join(', ')}.`);
+    if (dw.length >= 2 && dw.length > count(top.board, 'dw')) weak.push(`Opens double-word squares at ${dw.map(o => o.square).join(', ')}.`);
+    if (mine.board.bingoLinesAfter > mine.board.bingoLinesBefore && (!top.board || mine.board.bingoLinesAfter > top.board.bingoLinesAfter)) weak.push('Opens a new line where the opponent could bingo.');
     if (mine.board.usedBlank && dScore > 0) weak.push(`Uses the blank for only ${mine.score} points.`);
   }
-  if (mine.replies) {
-    if (mine.replies.over40 >= 0.15) weak.push(`The opponent scores 40 or more next turn with ${oneIn(mine.replies.over40)}.`);
-    else if (mine.replies.over30 >= 0.25) weak.push(`The opponent scores 30 or more next turn with ${oneIn(mine.replies.over30)}.`);
-    if (mine.replies.bingo >= 0.05) weak.push(`The opponent bingos next turn with ${oneIn(mine.replies.bingo)}.`);
+  if (mr && tr) {
+    if (mr.over40 >= 0.15 && mr.over40 - tr.over40 >= 0.05) weak.push(`The opponent scores 40 or more next turn with ${oneIn(mr.over40)}, against ${oneIn(tr.over40)} after Quackle's play.`);
+    else if (mr.over30 >= 0.25 && mr.over30 - tr.over30 >= 0.05) weak.push(`The opponent scores 30 or more next turn with ${oneIn(mr.over30)}, against ${oneIn(tr.over30)} after Quackle's play.`);
+    if (mr.bingo >= 0.05 && mr.bingo - tr.bingo >= 0.03) weak.push(`The opponent bingos next turn with ${oneIn(mr.bingo)}, against ${oneIn(tr.bingo)} after Quackle's play.`);
   }
   if (!why.length) why.push('The plays are close; Quackle prefers it by a small margin on its overall valuation.');
   if (!weak.length) weak.push('No single big weakness: it falls a little behind on overall value.');
@@ -161,8 +173,8 @@ export function checklist(top, mine) {
 // What goes to the AI write-up: only measured facts, no board to reinterpret.
 export function factsForWriter(top, mine) {
   const strip = f => ({
-    play: f.play, kind: f.kind, score: f.score, equity: f.equity, leave: f.leave.tiles,
-    leaveValue: f.leaveValue, boardValue: f.boardValue,
+    play: f.play.replace(/<[^>]+>/g, ''), kind: f.kind, score: f.score, equity: f.equity, leave: f.leave.tiles,
+    leaveValue: f.leaveValue, boardValue: f.boardValue, openingPlacementValue: f.placementValue,
     leaveNotes: { vowels: f.leave.vowels, consonants: f.leave.consonants, blanks: f.leave.blanks, esses: f.leave.esses, duplicates: f.leave.duplicates, qWithoutU: f.leave.qWithoutU, balance: f.leave.balance },
     board: f.board && { premiumSquaresOpened: f.board.opened, premiumSquaresClosed: f.board.closed, bingoLinesBefore: f.board.bingoLinesBefore, bingoLinesAfter: f.board.bingoLinesAfter, usedBlank: f.board.usedBlank },
     opponentNextTurn: f.replies && { racksSampled: f.replies.samples, averageBestReply: +f.replies.average.toFixed(1), shareScoring30Plus: pct(f.replies.over30), shareScoring40Plus: pct(f.replies.over40), shareBingo: pct(f.replies.bingo), strongestReplies: f.replies.worst.map(w => ({ play: w.label.replace(/<[^>]+>/g, ''), score: w.score, exampleRack: w.rack, share: pct(w.share) })) },

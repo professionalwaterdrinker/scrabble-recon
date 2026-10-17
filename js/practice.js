@@ -329,7 +329,7 @@ export function createPractice(ctx) {
       <p class="hint">The strongest replies the opponent found. Tap one to see it on the board.</p>
       <div class="worst">${r2.worst.map((x, n) => {
         const on = preview && preview.key === `${k}:w${n}`;
-        return `<button type="button" class="worst-case ${on ? 'on' : ''}" data-worst="${n}"><span class="ws-score">${x.score}</span><span class="ws-play">${x.label}</span><span class="ws-rack">with ${escapeHtml(x.rack)} · ${x.share >= 0.01 ? Math.round(x.share * 100) + '% of racks' : 'rare'}</span></button>`;
+        return `<button type="button" class="worst-case ${on ? 'on' : ''}" data-worst="${n}"><span class="ws-score">${x.score}</span><span class="ws-play">${x.label}</span><span class="ws-rack">with ${escapeHtml(x.rack)} · ${Math.round(x.share * r2.samples)} of ${r2.samples} sampled racks</span></button>`;
       }).join('')}</div>` : '';
     let writer = '';
     if (ctx.writer) {

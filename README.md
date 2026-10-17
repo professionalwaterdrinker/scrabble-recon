@@ -78,6 +78,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `quackle/` | Bridge and build script for the Quackle engine (WebAssembly) |
 | `js/quackle-worker.js` | Runs the Quackle engine in a background worker |
 | `js/simulate.js` | Runs Quackle simulations on several engine workers in parallel |
+| `js/explain.js` | Facts and checklist behind "Why is Quackle's play better?" |
 | `js/practice.js` | Practice mode: rules, scoring, rack input and Quackle reviews |
 | `quackle-test.html` | Test bench for Quackle move analysis |
 | `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
@@ -106,6 +107,17 @@ Static equity (score plus leave value) is quick, but it can't see openings you g
 - **Speed.** On an 8-core laptop, a 10-second run reaches about 1,400 playouts per play.
 
 Practice racks are exact. Replay racks may be partly estimated, and the card says so when they are.
+
+### Why Quackle's play is better (Practice)
+
+When your move wasn't Quackle's top choice, **Explain the difference** in the review compares the two plays:
+
+- **Points and leave:** the score now, and the tiles each play keeps. This uses Quackle's own breakdown, where equity = score + leave value + board adjustment.
+- **Leave quality:** vowel balance, duplicates, a Q without a U, keeping an S or a blank, bingo-friendly letters.
+- **The board:** premium squares each play opens or closes, and lines left open for a bingo.
+- **The opponent's next turn:** Quackle deals the opponent 150 random racks from the tiles you can't see (in about half a second), after each play. It then compares their average best reply, and how often they score 30-plus or bingo.
+
+Weak points are only listed when Quackle's play doesn't share them. When Quackle's play is the riskier one, the checklist says so. **Worst cases** shows the strongest replies your play allows; tap one to see it on the board in red. With a Claude API key set, **Write it up with Claude** turns the same measured facts into a short coach's note. It's told to use only those facts, and never to describe the board itself.
 
 ### Memory
 
