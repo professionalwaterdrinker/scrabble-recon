@@ -57,11 +57,20 @@ static std::string moveJson(const Move &m)
 {
 	std::ostringstream o;
 	const LetterString &shown = m.prettyTiles().empty() ? m.tiles() : m.prettyTiles();
-	o << "{\"place\":\"" << esc(m.positionString()) << "\",\"word\":\""
+	const char *action = m.action == Move::Place ? "place" : (m.action == Move::Exchange || m.action == Move::BlindExchange) ? "exchange" : "pass";
+	o << "{\"action\":\"" << action << "\",\"place\":\"" << esc(m.positionString()) << "\",\"word\":\""
 	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(shown)) << "\",\"tiles\":\""
 	  << esc(QUACKLE_ALPHABET_PARAMETERS->userVisible(m.tiles())) << "\",\"score\":" << m.effectiveScore()
 	  << ",\"equity\":" << m.equity << ",\"text\":\"" << esc(m.toString()) << "\"}";
 	return o.str();
+}
+
+// Put every rack back in the bag. Quackle refills racks with random draws after
+// each play, and those could hold tiles we're about to give someone.
+static void emptyRacks(GamePosition &pos, int playerCount)
+{
+	for (int i = 0; i < playerCount; ++i)
+		pos.setPlayerRack(i, Rack(), true);
 }
 
 static std::string fail(const std::string &why)
@@ -168,6 +177,7 @@ const char *qk_analyse(const char *input)
 	{
 		const Placed &p = moves[k];
 		GamePosition &pos = game.currentPosition();
+		emptyRacks(pos, playerCount);
 		pos.setCurrentPlayer(p.player);
 		pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(rackFor(p.word))));
 		Move m = Move::createPlaceMove(p.place, QUACKLE_ALPHABET_PARAMETERS->encode(p.word));
@@ -179,6 +189,7 @@ const char *qk_analyse(const char *input)
 	}
 
 	GamePosition &pos = game.currentPosition();
+	emptyRacks(pos, playerCount);
 	pos.setCurrentPlayer(rackPlayer);
 	pos.setCurrentPlayerRack(Rack(QUACKLE_ALPHABET_PARAMETERS->encode(rackText)));
 	pos.kibitz(top);
