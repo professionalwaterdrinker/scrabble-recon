@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'mabble-v9';
+const VERSION = 'mabble-v10';
 const SHELL = [
   './',
   'index.html',
@@ -22,7 +22,9 @@ const SHELL = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // 'reload' skips the browser's HTTP cache (GitHub Pages allows 10 minutes), so a new
+  // version never starts out with the previous version's files.
+  event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
@@ -43,7 +45,9 @@ self.addEventListener('fetch', event => {
       // The Quackle engine is large (about 26 MB) and rarely changes: once stored, serve it
       // from the cache without refreshing. Bumping VERSION clears it.
       if (cached && url.pathname.includes('/engine/')) return cached;
-      const fresh = fetch(event.request)
+      // 'no-cache' checks with the server (a cheap conditional request) instead of
+      // trusting the HTTP cache, so the background refresh really is fresh
+      const fresh = fetch(event.request.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then(res => { if (res.ok) cache.put(event.request, res.clone()); return res; })
         .catch(() => cached);
       return cached || fresh;
