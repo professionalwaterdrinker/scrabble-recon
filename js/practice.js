@@ -369,7 +369,8 @@ export function createPractice(ctx) {
 
   /* ---------- input ---------- */
 
-  async function clickSquare(i) {
+  // `again` is true when the board was already selected, so a second tap on the cursor turns it.
+  async function clickSquare(i, again = true) {
     if (!G || G.over || swap) return;
     preview = null;
     if (pending.has(i)) { pending.delete(i); render(); return; }
@@ -378,7 +379,7 @@ export function createPractice(ctx) {
       if (await placeTile(slot, i)) { cursor = i; advanceCursor(); }
       render(); return;
     }
-    if (i === cursor) dir = 1 - dir;
+    if (i === cursor && again) dir = 1 - dir;
     cursor = i;
     render();
   }

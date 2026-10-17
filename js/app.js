@@ -213,8 +213,9 @@ boardEl.addEventListener('mousedown', e => {
   if (S.mode === 'practice') {
     const sq = e.target.closest('.sq'); if (!sq) return;
     e.preventDefault();
+    const wasActive = document.activeElement === kbd;
     kbd.focus({ preventScroll: true });
-    practice.clickSquare(+sq.dataset.i);
+    practice.clickSquare(+sq.dataset.i, wasActive);
     return;
   }
   if (S.mode !== 'setup') return;
