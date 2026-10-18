@@ -174,7 +174,11 @@ try { const sk = localStorage.getItem('mabble.skin'), f = { brute: 'https://font
             <button class="btn" id="pxPass">Pass</button>
           </div>
           <p class="status" id="pxMsg" hidden></p>
-          <div class="row px-foot"><span class="bag" id="pxBag"></span><button class="btn" id="pxNew">New game</button></div>
+          <div class="row px-foot"><span class="bag" id="pxBag"></span>
+            <label class="px-opp">Opponent <select id="pxOpp" title="Who the next new game is against">
+              <option value="">Yourself</option><option value="basic">BasicBot (easy)</option><option value="better">BetterBot (medium)</option><option value="stee">SteeBot (hard)</option>
+            </select></label>
+            <button class="btn" id="pxNew">New game</button></div>
         </div>
         <div class="card">
           <h2 id="pxReviewTitle">Quackle review</h2>

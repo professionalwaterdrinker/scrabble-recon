@@ -22,6 +22,93 @@ export function createPractice(ctx) {
   let message = { text: '', cls: '' };
   const sims = {};               // move index -> { sim } (kept for this visit only)
 
+  /* ---------- computer opponents ---------- */
+
+  // Three levels, in the spirit of Woogles' bots. Each asks Quackle for its best 40 plays
+  // for the bot's own rack (it never sees yours) and picks one its own way.
+  const BOTS = {
+    basic: { name: 'BasicBot', pick: pickBasic },
+    better: { name: 'BetterBot', pick: pickBetter },
+    stee: { name: 'SteeBot', pick: pickStee },
+  };
+  const BOT = 1;                       // in a game against the computer you are player 0
+  const isBotTurn = () => !!(G && G.opp && !G.over && G.turn === BOT);
+  const name = p => G && G.opp ? (p === BOT ? BOTS[G.opp].name : 'You') : `Player ${p + 1}`;
+  const places = moves => moves.filter(m => m.action === 'place');
+  const fallback = (moves, bag) => moves.find(m => m.action === 'exchange' && bag >= RACK) || { action: 'pass' };
+  // BasicBot: a random play from the lower-scoring two thirds; usually passes up bingos; no board sense
+  function pickBasic(moves, bag) {
+    const p = places(moves);
+    if (!p.length) return fallback(moves, bag);
+    const pool = p.filter(m => [...m.tiles].filter(ch => ch !== '.').length < RACK || Math.random() < 0.15);
+    const byScore = (pool.length ? pool : p).slice().sort((a, b) => a.score - b.score);
+    const low = byScore.slice(0, Math.max(1, Math.ceil(byScore.length * 2 / 3)));
+    return low[Math.floor(Math.random() * low.length)];
+  }
+  // BetterBot: mostly points, with half an eye on the tiles it keeps
+  function pickBetter(moves, bag) {
+    const p = places(moves);
+    if (!p.length) return fallback(moves, bag);
+    const worth = m => m.score + 0.5 * (m.leaveValue || 0);
+    const best = p.reduce((a, b) => worth(b) > worth(a) ? b : a);
+    // a dreadful rack and a poor best play: swap, as a sensible player would
+    if (best.score < 8 && moves[0] && moves[0].action === 'exchange' && bag >= RACK) return moves[0];
+    return best;
+  }
+  // SteeBot: Quackle's top play by equity: score, the leave and board defence together
+  function pickStee(moves, bag) {
+    const top = moves[0];
+    if (!top) return { action: 'pass' };
+    if (top.action === 'exchange' && bag < RACK) return places(moves)[0] || { action: 'pass' };
+    return top;
+  }
+
+  let botBusy = false;
+  function botInput() {
+    const lines = ['players 2'];
+    for (const h of G.history) if (h.kind === 'play') lines.push(`move ${h.player} ${h.place} ${h.qword}`);
+    lines.push(`rack ${BOT} ${G.racks[BOT].join('')}`, 'top 40');
+    return lines.join('\n');
+  }
+  async function botTurn() {
+    if (!isBotTurn() || botBusy) return;
+    botBusy = true;
+    const game = G, started = Date.now(), bot = BOTS[G.opp];
+    message = { text: engine.state() === 'ready' ? `${bot.name} is thinking…` : `Loading Quackle for ${bot.name} (about 26 MB the first time)…`, cls: '' };
+    render();
+    let mv = null;
+    try {
+      await engine.ready();
+      const res = await engine.analyse(botInput());
+      if (res.ok) mv = bot.pick(res.moves || [], G.bag.length);
+      else message = { text: `${bot.name} couldn't think: ${res.error}`, cls: 'err' };
+    } catch (err) { message = { text: `${bot.name} couldn't think: ${err && err.message || err}`, cls: 'err' }; }
+    // a short pause, so its move doesn't land the instant yours does
+    const wait = Math.max(0, 900 - (Date.now() - started));
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    botBusy = false;
+    if (G !== game || !isBotTurn()) return;          // a new game was started meanwhile
+    if (!mv) { render(); return; }
+    applyBotMove(mv);
+  }
+  // Put the chosen play through the same rules as yours.
+  function applyBotMove(mv) {
+    recall(false);
+    const rack = G.racks[BOT], used = new Set();
+    const slotFor = (ch, blank) => { const want = blank ? '?' : ch; const k = rack.findIndex((t, j) => t === want && !used.has(j)); if (k >= 0) used.add(k); return k; };
+    if (mv.action === 'place') {
+      const sq = playSquares(mv, G.cells);
+      if (sq) for (const s of sq) if (!s.thru) { const k = slotFor(s.ch, s.blank); if (k < 0) { pending = new Map(); break; } pending.set(s.i, { slot: k, ch: s.ch, blank: s.blank }); }
+      if (pending.size && evaluate().ok) { play(); return; }
+      pending = new Map();
+    } else if (mv.action === 'exchange' && G.bag.length >= RACK) {
+      swap = new Set([...mv.tiles].map(ch => slotFor(ch.toUpperCase() === ch ? ch : '?', false)).filter(k => k >= 0));
+      if (swap.size) { confirmExchange(); return; }
+      swap = null;
+    }
+    pass();
+  }
+
   /* ---------- game state ---------- */
 
   function shuffle(a) {
@@ -32,10 +119,11 @@ export function createPractice(ctx) {
     const bag = [];
     for (const ch in TILES) for (let i = 0; i < TILES[ch]; i++) bag.push(ch);
     shuffle(bag);
-    G = { version: 1, bag, racks: [[], []], cells: Array(N * N).fill(''), blanks: [], scores: [0, 0], turn: 0, history: [], zeroRun: 0, over: false, end: null };
+    const opp = BOTS[$('pxOpp').value] ? $('pxOpp').value : null;
+    G = { version: 1, bag, racks: [[], []], cells: Array(N * N).fill(''), blanks: [], scores: [0, 0], turn: 0, history: [], zeroRun: 0, over: false, end: null, opp };
     G.racks.forEach((r, p) => draw(p));
     sel = null; pending = new Map(); swap = null; preview = null; viewing = null; cursor = CENTER; dir = 0;
-    message = { text: 'Player 1 to start. Your first word must cover the centre star.', cls: '' };
+    message = { text: opp ? `You against ${BOTS[opp].name}. You start: your first word must cover the centre star.` : 'Player 1 to start. Your first word must cover the centre star.', cls: '' };
     save();
   }
   function draw(p) {
@@ -124,7 +212,9 @@ export function createPractice(ctx) {
       G.turn = 1 - p;
     }
     save();
-    analyse(G.history.length - 1);
+    // a review redraws the panel itself; the computer's moves aren't reviewed, so redraw here
+    if (!G.opp || entry.player !== BOT) analyse(G.history.length - 1); else render();
+    if (isBotTurn()) setTimeout(botTurn, 0);
   }
   function play() {
     if (!G || G.over) return;
@@ -143,7 +233,7 @@ export function createPractice(ctx) {
     draw(p);
     G.zeroRun = 0;
     pending = new Map(); sel = null;
-    message = { text: `Player ${p + 1} played ${ev.words[0]} for ${ev.score}${ev.bingo ? ', a bingo' : ''}.`, cls: 'good' };
+    message = { text: `${name(p)} played ${ev.words[0]} for ${ev.score}${ev.bingo ? ', a bingo' : ''}.`, cls: 'good' };
     finishTurn(entry);
   }
   function startExchange() {
@@ -164,7 +254,7 @@ export function createPractice(ctx) {
     G.bag.push(...out); shuffle(G.bag);
     G.zeroRun++;
     swap = null;
-    message = { text: `Player ${p + 1} exchanged ${out.length} tile${out.length > 1 ? 's' : ''}.`, cls: 'good' };
+    message = { text: `${name(p)} exchanged ${out.length} tile${out.length > 1 ? 's' : ''}.`, cls: 'good' };
     finishTurn(entry);
   }
   function pass() {
@@ -172,12 +262,12 @@ export function createPractice(ctx) {
     recall(false);
     const p = G.turn;
     G.zeroRun++;
-    message = { text: `Player ${p + 1} passed.`, cls: '' };
+    message = { text: `${name(p)} passed.`, cls: '' };
     finishTurn({ kind: 'pass', player: p, score: 0, rack: G.racks[p].join(''), other: G.racks[1 - p].join(''), bag: G.bag.length });
   }
   function recall(redraw = true) { pending = new Map(); sel = null; swap = null; if (redraw) { message = { text: '', cls: '' }; render(); } }
   function shuffleRack() {
-    if (!G) return;
+    if (!G || isBotTurn()) return;
     recall(false);
     shuffle(G.racks[G.turn]); save(); render();
   }
@@ -230,7 +320,7 @@ export function createPractice(ctx) {
     save(); render();
   }
   // Retry any moves still waiting (for example after reloading the page).
-  function analyseMissing() { G.history.forEach((e, k) => { if (!e.analysis) { delete e.analysisError; analyse(k); } }); }
+  function analyseMissing() { G.history.forEach((e, k) => { if (!e.analysis && !(G.opp && e.player === BOT)) { delete e.analysisError; analyse(k); } }); }
 
   // Board as it was before history entry k.
   function boardBefore(k) {
@@ -362,7 +452,7 @@ export function createPractice(ctx) {
   function renderRack() {
     const box = $('pxRacks');
     if (!G) { box.innerHTML = ''; return; }
-    const p = G.turn, used = new Set([...pending.values()].map(t => t.slot));
+    const p = G.opp ? 0 : G.turn, used = new Set([...pending.values()].map(t => t.slot));
     const mine = G.racks[p].map((ch, k) => {
       const cls = ['pxtile', used.has(k) ? 'gone' : '', sel === k ? 'picked' : '', swap && swap.has(k) ? 'swap' : ''].filter(Boolean).join(' ');
       const face = ch === '?' ? '' : `${ch}<i>${VAL[ch]}</i>`;
@@ -370,9 +460,9 @@ export function createPractice(ctx) {
     }).join('');
     const o = 1 - p, backs = G.racks[o].map((_, k) => `<span class="rtile back ${arriving.has(o + ':' + k) ? 'arriving' : ''}" data-tile="${o}:${k}" aria-hidden="true"></span>`).join('');
     box.innerHTML = `
-      <div class="shelf mover" data-player="${p}"><div class="shelf-head"><b>Player ${p + 1}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : 'your turn'}</span></div>
+      <div class="shelf ${G.turn === p || G.over ? 'mover' : ''}" data-player="${p}"><div class="shelf-head"><b>${name(p)}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : G.turn === p ? 'your turn' : 'waiting'}</span></div>
         <div class="rack px-rack">${mine || '<span class="hint">No tiles left</span>'}</div></div>
-      <div class="shelf" data-player="${o}"><div class="shelf-head"><b>Player ${o + 1}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">face down</span></div>
+      <div class="shelf ${G.opp && G.turn === o && !G.over ? 'mover' : ''}" data-player="${o}"><div class="shelf-head"><b>${name(o)}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">${G.opp && G.turn === o && !G.over ? 'thinking…' : 'face down'}</span></div>
         <div class="rack">${backs || '<span class="hint">No tiles left</span>'}</div></div>`;
   }
 
@@ -464,8 +554,9 @@ export function createPractice(ctx) {
     renderBreakdown(ev);
     $('pxMsg').textContent = message.text; $('pxMsg').className = 'status ' + message.cls; $('pxMsg').hidden = !message.text;
     $('pxBag').textContent = `Bag: ${G.bag.length} tile${G.bag.length === 1 ? '' : 's'}`;
-    $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">Player ${p + 1}${p === G.turn && !G.over ? ' · to play' : ''}</div><div class="pts">${s}</div></div>`).join('');
-    const playing = !G.over;
+    $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">${name(p)}${p === G.turn && !G.over ? (G.opp && p === BOT ? ' · thinking' : ' · to play') : ''}</div><div class="pts">${s}</div></div>`).join('');
+    // your controls rest while the computer is choosing its move
+    const playing = !G.over && !isBotTurn();
     $('pxPlay').disabled = !playing || !!swap || !ev.ok;
     $('pxRecall').disabled = !playing || (!pending.size && !swap);
     $('pxShuffle').disabled = !playing || !!swap;
@@ -475,10 +566,11 @@ export function createPractice(ctx) {
     if (G.over) {
       const e = G.end;
       $('pxMsg').hidden = false; $('pxMsg').className = 'status good';
-      const lead = G.scores[0] === G.scores[1] ? "It's a tie" : `Player ${G.scores[0] > G.scores[1] ? 1 : 2} wins`;
+      const winner = G.scores[0] > G.scores[1] ? 0 : 1;
+      const lead = G.scores[0] === G.scores[1] ? "It's a tie" : G.opp ? (winner === 0 ? 'You win' : `${name(BOT)} wins`) : `Player ${winner + 1} wins`;
       $('pxMsg').textContent = e && e.stalled
         ? `Game over after six scoreless turns. Both players lose the value of their tiles. ${lead}, ${G.scores[0]} to ${G.scores[1]}.`
-        : `Game over: Player ${e.out + 1} used their last tile and gains ${e.value} from Player ${2 - e.out}'s rack (${e.left || 'empty'}). ${lead}, ${G.scores[0]} to ${G.scores[1]}.`;
+        : `Game over: ${name(e.out)} used ${G.opp && e.out === 0 ? 'your' : 'their'} last tile and gains ${e.value} from ${G.opp ? (e.out === 0 ? `${name(BOT)}'s` : 'your') : `Player ${2 - e.out}'s`} rack (${e.left || 'empty'}). ${lead}, ${G.scores[0]} to ${G.scores[1]}.`;
     }
     renderReview();
     renderHistory();
@@ -494,7 +586,8 @@ export function createPractice(ctx) {
       return;
     }
     const e = G.history[k], before = boardBefore(k);
-    title.innerHTML = `Quackle review <span class="n">Move ${k + 1}, Player ${e.player + 1}</span>`;
+    title.innerHTML = `Quackle review <span class="n">Move ${k + 1}, ${name(e.player)}</span>`;
+    if (G.opp && e.player === BOT) { box.innerHTML = `<p class="hint">${name(BOT)}'s move. Quackle reviews your moves; pick one of yours in the list below to see it.</p>`; return; }
     const rack = `<p class="qk-rack">Rack ${[...e.rack].map(ch => `<span class="mini">${ch}</span>`).join('')}</p>`;
     if (e.analysing || (!e.analysis && !e.analysisError)) { box.innerHTML = `${rack}<p class="status"><span class="spinner"></span>${engine.state() === 'ready' ? 'Quackle is looking at this move…' : 'Loading Quackle (about 26 MB the first time)…'}</p>`; return; }
     if (e.analysisError) { box.innerHTML = `${rack}<p class="status err">Quackle couldn't review this move: ${escapeHtml(e.analysisError)}</p><div class="row"><button class="btn" data-retry="${k}">Try again</button></div>`; return; }
@@ -525,12 +618,12 @@ export function createPractice(ctx) {
     if (!G.history.length) { box.innerHTML = '<p class="hint">No moves yet.</p>'; $('pxTotals').textContent = ''; return; }
     const lost = [0, 0], n = [0, 0];
     G.history.forEach(e => { if (e.analysis && e.analysis.loss !== null) { lost[e.player] += e.analysis.loss; n[e.player]++; } });
-    $('pxTotals').innerHTML = n[0] + n[1] ? `Equity given up (lower is better): ${lost.map((v, p) => `Player ${p + 1} <b>${v.toFixed(1)}</b>`).join(' · ')}` : '';
+    $('pxTotals').innerHTML = n[0] + n[1] ? `Equity given up (lower is better): ${(G.opp ? [0] : [0, 1]).map(p => `${name(p)} <b>${lost[p].toFixed(1)}</b>`).join(' · ')}` : '';
     box.innerHTML = `<table><thead><tr><th>#</th><th>Player</th><th>Play</th><th class="num">Pts</th><th class="num">vs Quackle</th></tr></thead><tbody>${
       G.history.map((e, k) => {
         const play = e.kind === 'play' ? `${e.place} <span class="word">${escapeHtml(e.words[0])}</span>${e.bingo ? '<span class="bingo">BINGO</span>' : ''}` : e.kind === 'exchange' ? `Exchange ${e.tiles.length}` : 'Pass';
-        const qk = e.analysis ? (e.analysis.loss === null ? '–' : e.analysis.loss < 0.05 ? '<span class="okmark">✓</span>' : `−${e.analysis.loss.toFixed(1)}`) : e.analysisError ? '!' : '…';
-        return `<tr class="mv ${k === viewing ? 'cur' : ''}" data-view="${k}"><td>${k + 1}</td><td>P${e.player + 1}</td><td>${play}</td><td class="num">${e.score}</td><td class="num qk">${qk}</td></tr>`;
+        const qk = G.opp && e.player === BOT ? '' : e.analysis ? (e.analysis.loss === null ? '–' : e.analysis.loss < 0.05 ? '<span class="okmark">✓</span>' : `−${e.analysis.loss.toFixed(1)}`) : e.analysisError ? '!' : '…';
+        return `<tr class="mv ${k === viewing ? 'cur' : ''}" data-view="${k}"><td>${k + 1}</td><td>${G.opp ? (e.player === BOT ? escapeHtml(name(BOT)) : 'You') : `P${e.player + 1}`}</td><td>${play}</td><td class="num">${e.score}</td><td class="num qk">${qk}</td></tr>`;
       }).reverse().join('')}</tbody></table>`;
   }
 
@@ -538,7 +631,7 @@ export function createPractice(ctx) {
 
   // `again` is true when the board was already selected, so a second tap on the cursor turns it.
   async function clickSquare(i, again = true) {
-    if (!G || G.over || swap) return;
+    if (!G || G.over || swap || isBotTurn()) return;
     preview = null;
     if (pending.has(i)) { pending.delete(i); render(); return; }
     if (sel !== null && !G.cells[i]) {
@@ -551,7 +644,7 @@ export function createPractice(ctx) {
     render();
   }
   function clickSlot(k) {
-    if (!G || G.over) return;
+    if (!G || G.over || isBotTurn()) return;
     if (swap) { swap.has(k) ? swap.delete(k) : swap.add(k); render(); return; }
     sel = sel === k ? null : k;
     render();
@@ -559,6 +652,7 @@ export function createPractice(ctx) {
   // Keyboard: letters place tiles from the rack at the cursor.
   async function key(k) {
     if (!G || G.over) return false;
+    if (isBotTurn()) return /^([a-zA-Z]|Backspace|Enter|Escape| )$/.test(k);
     if (/^[a-zA-Z]$/.test(k)) {
       if (G.cells[cursor] || pending.has(cursor)) { advanceCursor(); if (G.cells[cursor] || pending.has(cursor)) return true; }
       const L = k.toUpperCase(), free = freeSlots(), rack = G.racks[G.turn];
@@ -600,6 +694,8 @@ export function createPractice(ctx) {
   }
 
   // wire up the panel
+  try { const o = localStorage.getItem('mabble.practiceOpp'); if (o !== null && [...$('pxOpp').options].some(x => x.value === o)) $('pxOpp').value = o; } catch (e) {}
+  $('pxOpp').onchange = () => { try { localStorage.setItem('mabble.practiceOpp', $('pxOpp').value); } catch (e) {} };
   $('pxPlay').onclick = play;
   $('pxRecall').onclick = () => recall();
   $('pxShuffle').onclick = shuffleRack;
@@ -638,6 +734,7 @@ export function createPractice(ctx) {
       }
       render();
       engine.ready().then(() => { analyseMissing(); render(); }, () => render());
+      if (isBotTurn()) botTurn();
     },
     view, clickSquare, key, render,
     hasPreview: () => !!preview,

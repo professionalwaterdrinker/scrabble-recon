@@ -343,6 +343,8 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .px-controls .btn { flex: 1 1 auto; }
 .px-foot { justify-content: space-between; }
 .px-foot .bag { font: 500 13px var(--f-mono); color: var(--muted); }
+.px-opp { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13.5px; color: var(--muted); }
+.px-opp select { font: inherit; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 #pxHistory { max-height: 320px; }
 .okmark { color: var(--ok); font-weight: 600; }
 .blank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
@@ -1215,3 +1217,5 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 @media (prefers-reduced-motion: reduce) {
   :root[data-fx="high"] .felt-swirl, :root[data-fx="high"] .px-rack .rtile, :root[data-fx="high"] .st-list { animation: none !important; transition: none !important; }
 }
+:root[data-skin="felt"] .px-opp { font-size: 16px; }
+:root[data-skin="brute"] .px-opp select { border: 2px solid var(--line); border-radius: 0; font-family: var(--f-head); }
