@@ -153,6 +153,7 @@ The **Practice** tab is an untimed game, against yourself or the computer. It de
   You always start, your rack stays face up and the computer's stays face down. Quackle reviews your moves only. The computer needs the Quackle engine (about 26 MB the first time).
 
 - **Making a move.** Tap a tile and then a square, or tap a square and type. Blanks ask which letter they stand for. A live check shows whether the play is legal (one line, no gaps, connected, centre star first, every word in the word list) and what it scores.
+- **What a play is worth, before you make it.** While you build a legal play, a panel shows **Score + Leave = Equity**. The leave is Quackle's value for the tiles you'd keep, and equity is the number its reviews compare. Under it you'll see the tiles kept and where Quackle ranks the play among its top 40 (with the best play's equity, but not the play itself). It updates a moment after you stop moving tiles.
 - **Your options.** Play, Recall, Shuffle, Exchange (when the bag holds at least 7 tiles) or Pass.
 - **Quackle reviews every move.** After each move, Quackle analyses the exact position and the exact rack you held, with the other rack set too so its bag matches the real one. It shows its highest-equity plays next to yours, including exchanges. Click any of them to see it on the board as it was before your move.
 - **Running totals.** The move list shows how much equity each move gave up, with a total for each player.
@@ -165,7 +166,7 @@ The **Skin** button in the header cycles through three looks. Your choice is sav
 
 - **Classic** (the default): calm greens with light and dark themes.
 - **Poster:** black, red and blue, in the style of a Constructivist propaganda poster.
-- **Felt:** a card-game table inspired by Balatro. It has swirling green felt, the Jersey 10 pixel font, chunky buttons and tiles that float like cards. In Practice, the score is shown as letter points × word multiplier, plus any crossing words and the 50-point bingo bonus. A MABBLE tile bag sits beside the board, and new tiles fly out of it one after another, the way cards are dealt from a deck. Felt is always dark.
+- **Felt:** a card-game table inspired by Balatro. It has swirling green felt, the Jersey 10 pixel font, chunky buttons and tiles that float like cards. A MABBLE tile bag sits beside the board, and new tiles fly out of it one after another, the way cards are dealt from a deck. Felt is always dark.
 
 Each skin's fonts load from Google Fonts only the first time you choose it.
 

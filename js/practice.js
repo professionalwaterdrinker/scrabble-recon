@@ -172,9 +172,9 @@ export function createPractice(ctx) {
     const wordText = w => w.map(i => B[i]).join('');
     const bad = words.map(wordText).filter(w => !isWord(w));
     if (bad.length) return { ok: false, reason: `${bad.join(', ')} ${bad.length > 1 ? "aren't" : "isn't"} in ${listName()}.` };
-    // the main word's score is shown as its letter points times its word multiplier
+    // the main word: the line the play runs along (or, for a single tile, the word it makes)
     const mainLine = main.length >= 2 ? main : words[0];
-    let score = 0, parts = null, cross = 0;
+    let score = 0;
     for (const w of words) {
       let s = 0, mult = 1;
       for (const i of w) {
@@ -186,14 +186,13 @@ export function createPractice(ctx) {
         s += v;
       }
       score += s * mult;
-      if (w === mainLine) parts = { letters: s, mult }; else cross += s * mult;
     }
     const bingo = squares.length === RACK;
     if (bingo) score += 50;
     // the play in Quackle's notation: '.' for letters already down, lowercase for blanks
     const mainDir = main.length >= 2 ? d : 1 - d;
     const qword = mainLine.map(i => pending.has(i) ? (pending.get(i).blank ? pending.get(i).ch.toLowerCase() : pending.get(i).ch) : '.').join('');
-    return { ok: true, score, bingo, words: words.map(wordText), place: notation(mainLine[0], mainDir), qword, mainLine, parts: { ...parts, cross, word: wordText(mainLine) } };
+    return { ok: true, score, bingo, words: words.map(wordText), place: notation(mainLine[0], mainDir), qword, mainLine };
   }
 
   /* ---------- making moves ---------- */
@@ -470,19 +469,66 @@ export function createPractice(ctx) {
         <div class="rack">${backs || '<span class="hint">No tiles left</span>'}</div></div>`;
   }
 
-  // Letters x word = points, with crossing words and the bingo bonus added on (styled by the felt skin)
-  let lastBreak = null;
-  function renderBreakdown(ev) {
-    const p = ev.ok ? ev.parts : null;
-    const key = p ? `${p.word}:${p.letters}:${p.mult}:${p.cross}:${ev.bingo}` : '';
-    if (key === lastBreak) return;
-    lastBreak = key;
-    const extras = p ? [p.cross ? `+${p.cross} crossing` : '', ev.bingo ? '+50 bingo' : ''].filter(Boolean) : [];
-    $('pxBreak').innerHTML = `
-      <div class="pb-chip letters ${p ? 'pop' : ''}"><small>Letters</small><b>${p ? p.letters : 0}</b></div>
-      <div class="pb-times">×</div>
-      <div class="pb-chip word ${p ? 'pop' : ''}"><small>Word</small><b>${p ? p.mult : 1}</b></div>
-      <div class="pb-total"><span>${p ? escapeHtml(p.word) + (extras.length ? ` <em>${extras.join(' ')}</em>` : '') : 'Place tiles to score'}</span><b class="${p ? 'pop' : ''}">${p ? ev.score : 0}</b></div>`;
+  // Live check of the play being built: its score, Quackle's value for the tiles it leaves
+  // you (the leave), and the two added together as equity, with where Quackle ranks it.
+  // Asked a moment after the tiles stop moving, and remembered, so each play is asked once.
+  const checks = new Map();      // position + play -> { status, actual, rank, best }
+  let checkTimer = null, lastPanel = null;
+  function checkKey(ev) { return `${G.history.length}|${G.racks[G.turn].join('')}|${ev.place}|${ev.qword}`; }
+  function checkInput(ev) {
+    const p = G.turn, lines = ['players 2'];
+    for (const h of G.history) if (h.kind === 'play') lines.push(`move ${h.player} ${h.place} ${h.qword}`);
+    lines.push(`hold ${1 - p} ${G.racks[1 - p].join('')}`, `rack ${p} ${G.racks[p].join('')}`, `actual ${ev.place} ${ev.qword}`, 'top 40');
+    return lines.join('\n');
+  }
+  function queueCheck(ev) {
+    const key = checkKey(ev);
+    if (checks.has(key)) return;
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(async () => {
+      if (checks.has(key)) return;
+      checks.set(key, { status: 'running' });
+      renderEquity(evaluate());
+      try {
+        await engine.ready();
+        const res = await engine.analyse(checkInput(ev));
+        checks.set(key, res.ok && res.actual
+          ? { status: 'done', actual: res.actual, rank: res.actualRank, best: res.moves[0] }
+          : { status: 'error', error: res.error || 'no result' });
+      } catch (err) { checks.set(key, { status: 'error', error: String(err && err.message || err) }); }
+      if (G) renderEquity(evaluate());
+    }, 250);
+  }
+  const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  function renderEquity(ev) {
+    const box = $('pxBreak');
+    let html;
+    if (!G || G.over || swap || isBotTurn()) html = '';
+    else if (!ev.ok) {
+      html = `<p class="pq-idle">${pending.size ? 'Finish a legal play to see what it’s worth.' : 'Place tiles to see the play’s score, what the tiles you keep are worth (the leave), and how Quackle rates it.'}</p>`;
+    } else {
+      const c = checks.get(checkKey(ev));
+      if (!c || c.status === 'running') queueCheck(ev);
+      const done = c && c.status === 'done', a = done ? c.actual : null;
+      // the middle chip is everything equity adds to the score, so the sum always adds up;
+      // it's labelled with the board term too when Quackle's board adjustment isn't zero
+      const leave = done ? a.equity - a.score : null, keep = done ? (a.leave || '') : null, boardToo = done && Math.abs(a.board || 0) >= 0.05;
+      const rank = done ? (c.rank === 0 ? 'Quackle’s top play' : c.rank > 0 ? `Quackle ranks this <b>#${c.rank + 1}</b> of its top 40` : 'Outside Quackle’s top 40') : '';
+      const best = done && c.rank !== 0 && c.best ? ` (the best is worth ${c.best.equity.toFixed(1)})` : '';
+      html = `
+        <div class="pb-chip score"><small>Score</small><b>${ev.score}</b></div>
+        <div class="pb-op">+</div>
+        <div class="pb-chip leave ${done ? (leave >= 0 ? 'good' : 'bad') : ''}"><small>${boardToo ? 'Leave &amp; board' : 'Leave'}</small><b>${done ? signed(leave) : '…'}</b></div>
+        <div class="pb-op">=</div>
+        <div class="pb-chip equity"><small>Equity</small><b>${done ? a.equity.toFixed(1) : '…'}</b></div>
+        <p class="pq-note">${done ? `${keep ? `Keeps <span class="pq-keep">${[...keep].map(ch => `<span class="mini">${ch}</span>`).join('')}</span>` : 'Uses every tile'} · ${rank}${best}.`
+          : c && c.status === 'error' ? `Quackle couldn't rate this play.`
+          : engine.state() === 'ready' ? '<span class="spinner"></span>Quackle is rating this play…' : '<span class="spinner"></span>Loading Quackle (about 26 MB the first time)…'}</p>`;
+    }
+    if (html === lastPanel) return;
+    lastPanel = html;
+    box.innerHTML = html;
+    box.hidden = !html;
   }
 
   // Felt skin: tiles fly out of the bag one after another, like cards dealt from a deck.
@@ -555,7 +601,7 @@ export function createPractice(ctx) {
     else if (swap) live = `${swap.size} tile${swap.size === 1 ? '' : 's'} chosen.`;
     else if (pending.size) live = ev.ok ? `<span class="ok">${ev.words.join(', ')}: ${ev.score} point${ev.score === 1 ? '' : 's'}${ev.bingo ? ' (bingo)' : ''}</span>` : `<span class="no">${escapeHtml(ev.reason)}</span>`;
     $('pxLive').innerHTML = live;
-    renderBreakdown(ev);
+    renderEquity(ev);
     $('pxMsg').textContent = message.text; $('pxMsg').className = 'status ' + message.cls; $('pxMsg').hidden = !message.text;
     $('pxBag').textContent = `Bag: ${G.bag.length} tile${G.bag.length === 1 ? '' : 's'}`;
     $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">${nameHtml(p)}${p === G.turn && !G.over ? (G.opp && p === BOT ? ' · thinking' : ' · to play') : ''}</div><div class="pts">${s}</div></div>`).join('');

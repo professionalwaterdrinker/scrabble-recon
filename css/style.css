@@ -343,6 +343,17 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .px-controls .btn { flex: 1 1 auto; }
 .px-foot { justify-content: space-between; }
 .px-foot .bag { font: 500 13px var(--f-mono); color: var(--muted); }
+/* Practice: score + leave = equity for the play being built, with Quackle's ranking */
+.px-break { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.pq-idle, .pq-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.pb-chip { border: 1px solid var(--line); border-radius: 10px; padding: 6px 6px 7px; text-align: center; background: var(--bg); min-width: 0; }
+.pb-chip small { display: block; font: 600 11px var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pb-chip b { font: 700 22px/1.15 var(--f-display); }
+.pb-chip.leave.good b { color: var(--ok); } .pb-chip.leave.bad b { color: var(--bad); }
+.pb-chip.equity { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pb-op { color: var(--muted); font: 700 18px var(--f-display); }
+.pq-note b { color: var(--ink); }
+.pq-keep { display: inline-flex; gap: 2px; vertical-align: -2px; }
 .px-opp { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13.5px; color: var(--muted); }
 .px-opp select { font: inherit; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 /* computer opponents' names, outlined in their difficulty colour */
@@ -947,7 +958,7 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
    tiles like playing cards, and scores shown as letters x word.
    Always dark, whatever the system setting.
    ===================================================================== */
-.felt-bg, .px-break { display: none; }
+.felt-bg { display: none; }
 :root[data-skin="felt"] {
   --bg: #163330; --surface: #34464f; --ink: #ffffff; --muted: #b8c7cc; --line: #1b252b; --hair: #2a3940;
   --accent: #fe5f55; --accent-ink: #ffffff; --frame: #11282a; --sq: #2b5a52; --sq-line: #1d423c;
@@ -1051,19 +1062,16 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
   background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .1) 0 5px, transparent 5px 10px); }
 
 /* Practice: the score as letters x word */
-:root[data-skin="felt"] .px-break { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px 10px; align-items: center; }
-.pb-chip { border-radius: 10px; padding: 6px 10px 8px; text-align: center; color: #fff; box-shadow: 0 5px 0 rgba(0, 0, 0, .35); }
-.pb-chip small { display: block; font: 400 14px var(--f-body); letter-spacing: .1em; text-transform: uppercase; opacity: .9; }
-.pb-chip b { font: 400 34px/1.05 var(--f-display); text-shadow: 0 3px 0 rgba(0, 0, 0, .3); }
-.pb-chip.letters { background: var(--blue); } .pb-chip.word { background: var(--accent); }
-.pb-times { font: 700 26px var(--f-display); color: var(--hot); text-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
-.pb-total { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 14px; border-radius: 10px; background: var(--panel-2); box-shadow: inset 0 3px 0 rgba(0, 0, 0, .2); }
-.pb-total span { color: var(--muted); font-size: 17px; letter-spacing: .04em; }
-.pb-total em { font-style: normal; color: var(--hot); margin-left: 6px; }
-.pb-total b { font: 400 36px var(--f-display); color: var(--hot); text-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
-.px-break .pop { animation: felt-pop .45s cubic-bezier(.3, 1.8, .5, 1) both; }
-.px-break .pb-chip.word.pop { animation-delay: .08s; }
-.px-break .pb-total b.pop { animation-delay: .18s; }
+/* Practice: the live equity check, in felt's chunky chips */
+:root[data-skin="felt"] .pb-chip { border: 0; border-radius: 10px; color: #fff; box-shadow: 0 5px 0 rgba(0, 0, 0, .35); }
+:root[data-skin="felt"] .pb-chip small { color: rgba(255, 255, 255, .9); font: 400 14px var(--f-body); }
+:root[data-skin="felt"] .pb-chip b { font: 400 32px/1.05 var(--f-display); text-shadow: 0 3px 0 rgba(0, 0, 0, .3); color: #fff; }
+:root[data-skin="felt"] .pb-chip.score { background: var(--blue); }
+:root[data-skin="felt"] .pb-chip.leave { background: var(--panel-2); } :root[data-skin="felt"] .pb-chip.leave.good { background: #2f9e72; } :root[data-skin="felt"] .pb-chip.leave.bad { background: var(--accent); }
+:root[data-skin="felt"] .pb-chip.equity { background: var(--panel-2); box-shadow: 0 0 0 3px var(--hot), 0 5px 0 rgba(0, 0, 0, .35); }
+:root[data-skin="felt"] .pb-chip.equity b { color: var(--hot); }
+:root[data-skin="felt"] .pb-op { color: var(--hot); font: 400 28px var(--f-display); text-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
+:root[data-skin="felt"] .pq-note, :root[data-skin="felt"] .pq-idle { font-size: 16px; }
 
 /* Quackle review and explanations */
 :root[data-skin="felt"] .worst-case { background: var(--panel-2); border: 2px solid var(--line); border-radius: 10px; }
@@ -1136,7 +1144,7 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 
 @media (prefers-reduced-motion: reduce) {
   :root[data-skin="felt"] .felt-swirl, :root[data-skin="felt"] h1, :root[data-skin="felt"] .mark span, :root[data-skin="felt"] .px-rack .rtile,
-  :root[data-skin="felt"] .st-tiles.big .st-tile, .px-break .pop { animation: none !important; }
+  :root[data-skin="felt"] .st-tiles.big .st-tile { animation: none !important; }
 }
 
 /* Felt: the MABBLE tile bag, and tiles flying from it to the rack */
@@ -1233,3 +1241,6 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 :root[data-skin="felt"] .bot-tag.lvl-easy { --lvl: #4bc292; } :root[data-skin="felt"] .bot-tag.lvl-medium { --lvl: #f5c04a; } :root[data-skin="felt"] .bot-tag.lvl-hard { --lvl: #fe5f55; }
 /* inside a heading label chip, a tag keeps its own background so its colour still reads */
 .card h2 .n .bot-tag { background: var(--surface); text-transform: none; letter-spacing: 0; }
+:root[data-skin="brute"] .pb-chip { border: 2px solid var(--line); border-radius: 0; box-shadow: 3px 3px 0 var(--shadow); }
+:root[data-skin="brute"] .pb-chip.equity { border-color: var(--accent); box-shadow: 3px 3px 0 var(--accent); }
+:root[data-skin="brute"] .pb-chip small { font-family: var(--f-head); }
