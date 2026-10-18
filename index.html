@@ -14,12 +14,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <script>
-// Optional poster skin: applied before the page draws, with its fonts loaded only when chosen
-try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentElement.dataset.skin = 'brute'; document.write('<link rel="stylesheet" id="skinFonts" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap">'); } } catch (e) {}
+// Optional skins (poster, felt): applied before the page draws, with their fonts loaded only when chosen
+try { const sk = localStorage.getItem('mabble.skin'), f = { brute: 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap', felt: 'https://fonts.googleapis.com/css2?family=Jersey+10&display=swap' }[sk]; if (f) { document.documentElement.dataset.skin = sk; document.write('<link rel="stylesheet" id="skinFonts-' + sk + '" href="' + f + '">'); } } catch (e) {}
 </script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div class="felt-bg" aria-hidden="true"><div class="felt-swirl"></div><div class="felt-crt"></div></div>
 <div class="wrap">
   <!-- ink filters: rough brush edges and torn-paper outlines -->
   <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
@@ -36,7 +37,7 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
     </div>
     <div class="head-tools">
     <button class="btn lex-btn" id="lexBtn" type="button" title="Choose the word list">Words: ENABLE</button>
-    <button class="btn lex-btn" id="skinBtn" type="button" title="Switch between the classic look and the poster look">Skin: Classic</button>
+    <button class="btn lex-btn" id="skinBtn" type="button" title="Switch skin">Skin: Classic</button>
     <div class="tabs" role="tablist" aria-label="Mode">
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>
@@ -155,6 +156,7 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
         <div class="card">
           <h2>Practice game</h2>
           <div class="scores" id="pxScores"></div>
+          <div class="px-break" id="pxBreak" aria-live="polite"></div>
           <div class="row px-controls">
             <button class="btn primary" id="pxPlay" disabled>Play</button>
             <button class="btn" id="pxRecall">Recall</button>

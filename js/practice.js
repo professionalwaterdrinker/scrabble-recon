@@ -74,7 +74,9 @@ export function createPractice(ctx) {
     const wordText = w => w.map(i => B[i]).join('');
     const bad = words.map(wordText).filter(w => !isWord(w));
     if (bad.length) return { ok: false, reason: `${bad.join(', ')} ${bad.length > 1 ? "aren't" : "isn't"} in ${listName()}.` };
-    let score = 0;
+    // the main word's score is shown as its letter points times its word multiplier
+    const mainLine = main.length >= 2 ? main : words[0];
+    let score = 0, parts = null, cross = 0;
     for (const w of words) {
       let s = 0, mult = 1;
       for (const i of w) {
@@ -86,14 +88,14 @@ export function createPractice(ctx) {
         s += v;
       }
       score += s * mult;
+      if (w === mainLine) parts = { letters: s, mult }; else cross += s * mult;
     }
     const bingo = squares.length === RACK;
     if (bingo) score += 50;
     // the play in Quackle's notation: '.' for letters already down, lowercase for blanks
-    const mainLine = main.length >= 2 ? main : words[0];
     const mainDir = main.length >= 2 ? d : 1 - d;
     const qword = mainLine.map(i => pending.has(i) ? (pending.get(i).blank ? pending.get(i).ch.toLowerCase() : pending.get(i).ch) : '.').join('');
-    return { ok: true, score, bingo, words: words.map(wordText), place: notation(mainLine[0], mainDir), qword, mainLine };
+    return { ok: true, score, bingo, words: words.map(wordText), place: notation(mainLine[0], mainDir), qword, mainLine, parts: { ...parts, cross, word: wordText(mainLine) } };
   }
 
   /* ---------- making moves ---------- */
@@ -368,6 +370,21 @@ export function createPractice(ctx) {
         <div class="rack">${backs || '<span class="hint">No tiles left</span>'}</div></div>`;
   }
 
+  // Letters x word = points, with crossing words and the bingo bonus added on (styled by the felt skin)
+  let lastBreak = null;
+  function renderBreakdown(ev) {
+    const p = ev.ok ? ev.parts : null;
+    const key = p ? `${p.word}:${p.letters}:${p.mult}:${p.cross}:${ev.bingo}` : '';
+    if (key === lastBreak) return;
+    lastBreak = key;
+    const extras = p ? [p.cross ? `+${p.cross} crossing` : '', ev.bingo ? '+50 bingo' : ''].filter(Boolean) : [];
+    $('pxBreak').innerHTML = `
+      <div class="pb-chip letters ${p ? 'pop' : ''}"><small>Letters</small><b>${p ? p.letters : 0}</b></div>
+      <div class="pb-times">×</div>
+      <div class="pb-chip word ${p ? 'pop' : ''}"><small>Word</small><b>${p ? p.mult : 1}</b></div>
+      <div class="pb-total"><span>${p ? escapeHtml(p.word) + (extras.length ? ` <em>${extras.join(' ')}</em>` : '') : 'Place tiles to score'}</span><b class="${p ? 'pop' : ''}">${p ? ev.score : 0}</b></div>`;
+  }
+
   function render() {
     if (!G) return;
     renderRack();
@@ -378,6 +395,7 @@ export function createPractice(ctx) {
     else if (swap) live = `${swap.size} tile${swap.size === 1 ? '' : 's'} chosen.`;
     else if (pending.size) live = ev.ok ? `<span class="ok">${ev.words.join(', ')}: ${ev.score} point${ev.score === 1 ? '' : 's'}${ev.bingo ? ' (bingo)' : ''}</span>` : `<span class="no">${escapeHtml(ev.reason)}</span>`;
     $('pxLive').innerHTML = live;
+    renderBreakdown(ev);
     $('pxMsg').textContent = message.text; $('pxMsg').className = 'status ' + message.cls; $('pxMsg').hidden = !message.text;
     $('pxBag').textContent = `Bag: ${G.bag.length} tile${G.bag.length === 1 ? '' : 's'}`;
     $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">Player ${p + 1}${p === G.turn && !G.over ? ' · to play' : ''}</div><div class="pts">${s}</div></div>`).join('');

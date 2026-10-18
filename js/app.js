@@ -900,25 +900,32 @@ async function openLexDialog() {
 }
 $('lexBtn').onclick = openLexDialog;
 
-// ---- skin: classic (default) or the poster look ----
-const POSTER_FONTS = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap';
-function applySkin(skin) {
-  const poster = skin === 'brute';
-  if (poster) document.documentElement.dataset.skin = 'brute';
-  else delete document.documentElement.dataset.skin;
-  if (poster && !document.getElementById('skinFonts')) {
+// ---- skins: classic (default), the poster look, or felt (a card-game table) ----
+// Each skin's fonts load only the first time it's chosen. The button cycles through them.
+const SKINS = [
+  { id: 'classic', name: 'Classic', color: '#1d4740' },
+  { id: 'brute', name: 'Poster', color: '#0a0a0a', fonts: 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap' },
+  { id: 'felt', name: 'Felt', color: '#173a36', fonts: 'https://fonts.googleapis.com/css2?family=Jersey+10&display=swap' },
+];
+function applySkin(id) {
+  const skin = SKINS.find(s => s.id === id) || SKINS[0];
+  if (skin.id === 'classic') delete document.documentElement.dataset.skin;
+  else document.documentElement.dataset.skin = skin.id;
+  if (skin.fonts && !document.getElementById('skinFonts-' + skin.id)) {
     const link = document.createElement('link');
-    link.rel = 'stylesheet'; link.id = 'skinFonts'; link.href = POSTER_FONTS;
+    link.rel = 'stylesheet'; link.id = 'skinFonts-' + skin.id; link.href = skin.fonts;
     document.head.appendChild(link);
   }
-  document.querySelector('meta[name="theme-color"]').content = poster ? '#0a0a0a' : '#1d4740';
-  $('skinBtn').textContent = `Skin: ${poster ? 'Poster' : 'Classic'}`;
+  document.querySelector('meta[name="theme-color"]').content = skin.color;
+  $('skinBtn').textContent = `Skin: ${skin.name}`;
+  $('skinBtn').title = `Switch skin (next: ${SKINS[(SKINS.indexOf(skin) + 1) % SKINS.length].name})`;
 }
 applySkin(document.documentElement.dataset.skin);
 $('skinBtn').onclick = () => {
-  const skin = document.documentElement.dataset.skin === 'brute' ? 'classic' : 'brute';
-  try { localStorage.setItem('mabble.skin', skin); } catch (e) {}
-  applySkin(skin);
+  const cur = SKINS.findIndex(s => s.id === (document.documentElement.dataset.skin || 'classic'));
+  const next = SKINS[(cur + 1) % SKINS.length].id;
+  try { localStorage.setItem('mabble.skin', next); } catch (e) {}
+  applySkin(next);
 };
 $('lexFile').onchange = async e => {
   const f = e.target.files[0];

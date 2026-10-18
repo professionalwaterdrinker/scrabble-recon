@@ -152,6 +152,16 @@ The **Practice** tab is an untimed game against yourself. It deals two racks fro
 - **The ending** follows standard rules: going out with the bag empty earns the other rack's value, and six scoreless turns in a row end the game.
 - **Saved automatically.** The game is saved in your browser, so you can come back to it later.
 
+## Skins
+
+The **Skin** button in the header cycles through three looks. Your choice is saved in the browser:
+
+- **Classic** (the default): calm greens with light and dark themes.
+- **Poster:** black, red and blue, in the style of a Constructivist propaganda poster.
+- **Felt:** a card-game table inspired by Balatro. It has swirling green felt, the Jersey 10 pixel font, chunky buttons and tiles that float like cards. In Practice, the score is shown as letter points × word multiplier, plus any crossing words and the 50-point bingo bonus. Felt is always dark.
+
+Each skin's fonts load from Google Fonts only the first time you choose it. Animations stop when your system asks for reduced motion.
+
 ## Study
 
 The **Study** tab is for learning words, in the spirit of Aerolith's Wordwalls and WordVault but simpler.
