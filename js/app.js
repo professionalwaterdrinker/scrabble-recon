@@ -927,6 +927,26 @@ $('skinBtn').onclick = () => {
   try { localStorage.setItem('mabble.skin', next); } catch (e) {}
   applySkin(next);
 };
+// ---- effects: battery saver (no looping or decorative motion), standard, or high quality (smooth motion) ----
+const FX = [
+  { id: 'standard', name: 'Standard', tip: 'Light, stepped motion' },
+  { id: 'saver', name: 'Battery saver', tip: 'No looping animations or extra effects' },
+  { id: 'high', name: 'High quality', tip: 'Smooth motion and richer effects' },
+];
+function applyFx(id) {
+  const fx = FX.find(f => f.id === id) || FX[0];
+  if (fx.id === 'standard') delete document.documentElement.dataset.fx;
+  else document.documentElement.dataset.fx = fx.id;
+  $('fxBtn').textContent = `Effects: ${fx.name}`;
+  $('fxBtn').title = `${fx.tip}. Click for ${FX[(FX.indexOf(fx) + 1) % FX.length].name.toLowerCase()}.`;
+}
+applyFx(document.documentElement.dataset.fx);
+$('fxBtn').onclick = () => {
+  const cur = FX.findIndex(f => f.id === (document.documentElement.dataset.fx || 'standard'));
+  const next = FX[(cur + 1) % FX.length].id;
+  try { next === 'standard' ? localStorage.removeItem('mabble.fx') : localStorage.setItem('mabble.fx', next); } catch (e) {}
+  applyFx(next);
+};
 $('lexFile').onchange = async e => {
   const f = e.target.files[0];
   pendingList = null; $('lexUse').disabled = true;

@@ -160,7 +160,15 @@ The **Skin** button in the header cycles through three looks. Your choice is sav
 - **Poster:** black, red and blue, in the style of a Constructivist propaganda poster.
 - **Felt:** a card-game table inspired by Balatro. It has swirling green felt, the Jersey 10 pixel font, chunky buttons and tiles that float like cards. In Practice, the score is shown as letter points × word multiplier, plus any crossing words and the 50-point bingo bonus. A MABBLE tile bag sits beside the board, and new tiles fly out of it one after another, the way cards are dealt from a deck. Felt is always dark.
 
-Each skin's fonts load from Google Fonts only the first time you choose it. Animations stop when your system asks for reduced motion.
+Each skin's fonts load from Google Fonts only the first time you choose it.
+
+The **Effects** button sets how much moves, and is saved in the browser too:
+
+- **Standard** (the default): light, stepped motion that keeps redrawing to a minimum.
+- **Battery saver:** nothing loops or eases, and filters and Felt's background effects are switched off. Tiles appear in the rack without the deal animation. Only the loading spinner still turns.
+- **High quality:** smooth eased motion, Felt's slowly turning background, a longer deal where tiles flip as they leave the bag, springier flashcards and hover lifts. It looks nicest but works the graphics hardware hardest.
+
+Whatever the setting, animations stop when your system asks for reduced motion.
 
 ## Study
 

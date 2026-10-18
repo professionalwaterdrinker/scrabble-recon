@@ -15,6 +15,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <script>
 // Optional skins (poster, felt): applied before the page draws, with their fonts loaded only when chosen
+// Effects: battery saver or high quality (standard has no attribute)
+try { const fx = localStorage.getItem('mabble.fx'); if (fx === 'saver' || fx === 'high') document.documentElement.dataset.fx = fx; } catch (e) {}
 try { const sk = localStorage.getItem('mabble.skin'), f = { brute: 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap', felt: 'https://fonts.googleapis.com/css2?family=Jersey+10&display=swap' }[sk]; if (f) { document.documentElement.dataset.skin = sk; document.write('<link rel="stylesheet" id="skinFonts-' + sk + '" href="' + f + '">'); } } catch (e) {}
 </script>
 <link rel="stylesheet" href="css/style.css">
@@ -38,6 +40,7 @@ try { const sk = localStorage.getItem('mabble.skin'), f = { brute: 'https://font
     <div class="head-tools">
     <button class="btn lex-btn" id="lexBtn" type="button" title="Choose the word list">Words: ENABLE</button>
     <button class="btn lex-btn" id="skinBtn" type="button" title="Switch skin">Skin: Classic</button>
+    <button class="btn lex-btn" id="fxBtn" type="button" title="Switch animation quality">Effects: Standard</button>
     <div class="tabs" role="tablist" aria-label="Mode">
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>

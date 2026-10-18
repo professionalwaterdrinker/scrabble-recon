@@ -1153,3 +1153,28 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 :root[data-skin="felt"] .st-skip .hint { color: rgba(255, 255, 255, .85); font-size: 15px; }
 :root[data-skin="felt"] .st-face.back .st-words li.got .w, :root[data-skin="felt"] .st-face.back .st-hw.got, :root[data-skin="felt"] .st-face.back .st-stem-row.got b { color: #2a7d5c; }
 :root[data-skin="felt"] .st-face.back .st-words li.miss .w, :root[data-skin="felt"] .st-face.back .st-hw.miss, :root[data-skin="felt"] .st-face.back .st-stem-row.miss b { color: #c0392b; }
+
+/* =====================================================================
+   EFFECTS (data-fx on the root): "saver" and "high". Standard has no attribute.
+   ===================================================================== */
+/* Battery saver: nothing loops or eases, and the costlier effects go. The loading spinner
+   still turns, so it's clear when something is working. */
+:root[data-fx="saver"] *:not(.spinner), :root[data-fx="saver"] *::before, :root[data-fx="saver"] *::after { animation: none !important; transition: none !important; }
+:root[data-fx="saver"] * { filter: none !important; will-change: auto !important; }
+:root[data-fx="saver"] .felt-swirl { background: #163330 !important; }
+:root[data-fx="saver"] .felt-crt { display: none; }
+
+/* High quality: smooth eased motion instead of held frames, the turning felt, springier cards */
+:root[data-fx="high"][data-skin="felt"] h1, :root[data-fx="high"][data-skin="felt"] .mark span, :root[data-fx="high"][data-skin="felt"] .px-rack .rtile,
+:root[data-fx="high"][data-skin="felt"] .st-tiles.big .st-tile, :root[data-fx="high"][data-skin="felt"] .bag-art { animation-timing-function: ease-in-out !important; }
+:root[data-fx="high"][data-skin="felt"] .felt-swirl { inset: -60%; will-change: transform; animation: felt-turn 120s linear infinite; }
+@keyframes felt-turn { to { transform: rotate(360deg); } }
+:root[data-fx="high"] .st-flash { transition: transform .65s cubic-bezier(.3, 1.35, .5, 1); }
+:root[data-fx="high"] .px-rack .rtile { transition: transform .18s ease, box-shadow .18s ease; }
+:root[data-fx="high"] .px-rack .rtile:hover:not(.gone):not(.back) { animation: none; transform: translateY(-6px) rotate(-2deg); }
+:root[data-fx="high"] .st-list { transition: transform .25s cubic-bezier(.3, 1.4, .5, 1), box-shadow .25s, border-color .25s; }
+:root[data-fx="high"] .st-list:hover { transform: translateY(-4px) rotate(-.6deg); }
+:root[data-fx="high"] .btn { transition: transform .12s ease, box-shadow .12s ease, filter .12s ease; }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-fx="high"] .felt-swirl, :root[data-fx="high"] .px-rack .rtile, :root[data-fx="high"] .st-list { animation: none !important; transition: none !important; }
+}

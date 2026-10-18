@@ -395,7 +395,7 @@ export function createPractice(ctx) {
   function takeDraws() {
     const list = drawn; drawn = [];
     const bag = $('tileBag');
-    const on = document.documentElement.dataset.skin === 'felt' && !matchMedia('(prefers-reduced-motion: reduce)').matches
+    const on = document.documentElement.dataset.skin === 'felt' && document.documentElement.dataset.fx !== 'saver' && !document.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches
       && bag && bag.offsetParent !== null && typeof Element.prototype.animate === 'function';
     if (!on) return [];
     list.forEach(t => arriving.add(t.p + ':' + t.k));
@@ -407,6 +407,8 @@ export function createPractice(ctx) {
     const bx = mouth.left + mouth.width * 0.78, by = mouth.top + mouth.height * 0.2, count = $('tileBagCount');
     let left = list.length;
     count.textContent = G.bag.length + left;
+    // high quality: slower, more flowing flights with a flip as each tile leaves the bag
+    const high = document.documentElement.dataset.fx === 'high', gap = high ? 150 : 120, dur = high ? 760 : 560;
     list.forEach((t, n) => setTimeout(() => {
       const key = t.p + ':' + t.k, el = $('pxRacks').querySelector(`[data-tile="${key}"]`);
       count.textContent = G.bag.length + --left;
@@ -423,15 +425,22 @@ export function createPractice(ctx) {
         const now = $('pxRacks').querySelector(`[data-tile="${key}"]`);
         if (now) { now.classList.remove('arriving'); now.animate([{ transform: 'translateY(-6px) scale(1.06)' }, { transform: 'none' }], { duration: 200, easing: 'ease-out' }); }
       };
-      ghost.animate([
+      ghost.animate(high ? [
+        { transform: `translate(${dx}px, ${dy}px) scale(.25) rotate(${spin}deg) rotateY(180deg)`, opacity: 0 },
+        { transform: `translate(${dx * .7}px, ${dy * .7 - 60}px) scale(.7) rotate(${spin / 2}deg) rotateY(90deg)`, opacity: 1, offset: .25 },
+        { transform: `translate(${dx * .35}px, ${dy * .35 - 90}px) scale(.95) rotate(${spin / 4}deg) rotateY(0deg)`, offset: .55 },
+        { transform: 'translate(0, -14px) scale(1.1) rotate(-4deg)', offset: .82 },
+        { transform: 'translate(0, 2px) scale(.98) rotate(1deg)', offset: .93 },
+        { transform: 'none' },
+      ] : [
         { transform: `translate(${dx}px, ${dy}px) scale(.3) rotate(${spin}deg)`, opacity: 0 },
         { transform: `translate(${dx * .45}px, ${dy * .45 - 70}px) scale(.9) rotate(${spin / 3}deg)`, opacity: 1, offset: .45 },
         { transform: 'translate(0, -10px) scale(1.08) rotate(-3deg)', offset: .85 },
         { transform: 'none' },
-      ], { duration: 560, easing: 'cubic-bezier(.25, .7, .3, 1)' }).finished.then(land, land);
-    }, n * 120));
+      ], { duration: dur, easing: 'cubic-bezier(.25, .7, .3, 1)' }).finished.then(land, land);
+    }, n * gap));
     // whatever happens, nothing stays hidden for long
-    setTimeout(() => { if (!arriving.size) return; arriving.clear(); $('pxRacks').querySelectorAll('.arriving').forEach(e => e.classList.remove('arriving')); }, list.length * 120 + 1500);
+    setTimeout(() => { if (!arriving.size) return; arriving.clear(); $('pxRacks').querySelectorAll('.arriving').forEach(e => e.classList.remove('arriving')); }, list.length * gap + dur + 1200);
   }
 
   function render() {
@@ -439,7 +448,12 @@ export function createPractice(ctx) {
     const fly = takeDraws();
     renderRack();
     $('tileBagCount').textContent = G.bag.length;
-    if (fly.length) requestAnimationFrame(() => launch(fly));
+    if (fly.length) {
+      // if the page can't draw (a background tab), don't leave the new tiles hidden waiting for it
+      let started = false;
+      requestAnimationFrame(() => { started = true; launch(fly); });
+      setTimeout(() => { if (started) return; arriving.clear(); $('pxRacks').querySelectorAll('.arriving').forEach(e => e.classList.remove('arriving')); }, 1000);
+    }
     const ev = evaluate();
     // live check of the tentative play
     let live = '';
