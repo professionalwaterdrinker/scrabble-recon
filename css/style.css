@@ -214,6 +214,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 textarea { width: 100%; min-height: 250px; font: 13px/1.35 var(--f-mono); padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); resize: vertical; }
 .opts { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 14px; }
 .opts label { display: inline-flex; gap: 6px; align-items: center; }
+.score-in { align-items: center; margin-top: 8px; }
+.score-in #scoreFields { display: inline-flex; flex-wrap: wrap; gap: 8px 14px; }
+.score-in input { width: 70px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
 select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
 
 /* replay */

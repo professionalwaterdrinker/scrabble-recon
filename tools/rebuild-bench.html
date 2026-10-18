@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebuild Bench</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; background: #f4f4f2; color: #222; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  td, th { border: 1px solid #ccc; padding: 4px 8px; text-align: right; }
+  pre { font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>Game rebuild bench</h1>
+<p>Quackle plays games against itself, picking one of its top plays the way a decent club player might.
+Each finished board is then rebuilt and compared with the real order of play. Add <code>?games=6</code> to change how many games run,
+<code>?old</code> to also score a previous solver saved as <code>tools/old-solver.tmp.js</code> (for example with <code>git show HEAD~1:js/solver.js</code>). Not part of the app.</p>
+<pre id="log">Loading Quackle…</pre>
+<div id="out"></div>
+<script type="module">
+const N = 15;
+const params = new URLSearchParams(location.search);
+const GAMES = +(params.get('games') || 6);
+const log = t => { document.getElementById('log').textContent += '\n' + t; };
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+
+/* ---------- Quackle self-play ---------- */
+const qk = new Worker('../js/quackle-worker.js', { type: 'module' });
+let nextId = 1; const waiting = new Map();
+qk.onmessage = e => { const m = e.data; if (m.type === 'ready' || m.type === 'error') waiting.get('load')(m); else if (waiting.has(m.id)) { waiting.get(m.id)(m.result); waiting.delete(m.id); } };
+const call = msg => new Promise(r => { const id = nextId++; waiting.set(id, r); qk.postMessage({ ...msg, id }); });
+const loaded = await new Promise(r => { waiting.set('load', r); qk.postMessage({ type: 'load' }); });
+if (loaded.type === 'error') { log('Quackle failed: ' + loaded.message); throw new Error(loaded.message); }
+log('Quackle ready.');
+
+const DIST = { A:9,B:2,C:2,D:4,E:12,F:2,G:3,H:2,I:9,J:1,K:1,L:4,M:2,N:6,O:8,P:2,Q:1,R:6,S:4,T:6,U:4,V:2,W:2,X:1,Y:2,Z:1,'?':2 };
+const VAL = { A:1,B:3,C:3,D:2,E:1,F:4,G:2,H:4,I:1,J:8,K:5,L:1,M:3,N:1,O:1,P:3,Q:10,R:1,S:1,T:1,U:1,V:4,W:4,X:8,Y:4,Z:10,'?':0 };
+const COLS = 'ABCDEFGHIJKLMNO';
+function squares(move, cells) {
+  const h = /^(\d+)([A-O])$/i.exec(move.place), v = /^([A-O])(\d+)$/i.exec(move.place);
+  const r0 = h ? +h[1] - 1 : +v[2] - 1, c0 = COLS.indexOf((h ? h[2] : v[1]).toUpperCase()), dr = h ? 0 : 1, dc = h ? 1 : 0;
+  const out = [];
+  [...move.tiles].forEach((ch, k) => { const i = (r0 + dr * k) * N + c0 + dc * k; if (ch !== '.') out.push({ i, ch: ch.toUpperCase(), blank: ch !== ch.toUpperCase() }); });
+  return out;
+}
+async function playGame(seed) {
+  const R = rng(seed);
+  const bag = []; for (const [t, n] of Object.entries(DIST)) for (let k = 0; k < n; k++) bag.push(t);
+  for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+  const racks = [bag.splice(0, 7), bag.splice(0, 7)], scores = [0, 0], lines = [], truth = [];
+  const cells = Array(N * N).fill(''), blanks = new Set();
+  let p = 0, stuck = 0;
+  while (true) {
+    const input = ['players 2', ...lines, `rack ${p} ${racks[p].join('')}`, 'top 8'].join('\n');
+    const res = await call({ type: 'analyse', input });
+    const places = (res.moves || []).filter(m => m.action === 'place');
+    if (!places.length) { if (++stuck >= 2) break; lines.push(`pass ${p}`); p = 1 - p; continue; }
+    stuck = 0;
+    // a decent player: usually Quackle's first or second choice, sometimes a lesser one
+    const x = R(), pick = x < 0.5 ? 0 : x < 0.75 ? 1 : x < 0.88 ? 2 : 3 + Math.floor(R() * 5);
+    const mv = places[Math.min(pick, places.length - 1)];
+    const sq = squares(mv, cells);
+    for (const s of sq) {
+      cells[s.i] = s.ch; if (s.blank) blanks.add(s.i);
+      const k = racks[p].indexOf(s.blank ? '?' : s.ch); racks[p].splice(k, 1);
+    }
+    scores[p] += mv.score;
+    truth.push({ tiles: sq.map(s => s.i).sort((a, b) => a - b), player: p, score: mv.score });
+    lines.push(`move ${p} ${mv.place} ${mv.tiles}`);
+    while (racks[p].length < 7 && bag.length) racks[p].push(bag.pop());
+    if (!racks[p].length) {
+      const left = racks[1 - p].reduce((s, t) => s + VAL[t], 0);
+      scores[p] += left; scores[1 - p] -= left; break;
+    }
+    p = 1 - p;
+  }
+  return { cells, blanks: [...blanks], truth, scores };
+}
+
+/* ---------- rebuilding ---------- */
+const words = await (await fetch('../data/words.txt')).text();
+function solver(url) {
+  const w = new Worker(url);
+  const ready = new Promise(r => { w.onmessage = e => { if (e.data.type === 'ready') r(); }; });
+  w.postMessage({ type: 'dict', text: words.split(/\r?\n/).join('\n') });
+  return { ready, judge: msg => new Promise(r => { w.onmessage = e => { if (e.data.type === 'judged') r(e.data); }; w.postMessage({ type: 'judge', id: 1, ...msg }); }), solve: msg => new Promise(r => { const t0 = performance.now(); w.onmessage = e => { if (e.data.type === 'result') { log(`    ${url.split('/').pop()}: ${e.data.ok ? e.data.moves.length + ' moves' : e.data.reason} in ${((performance.now() - t0) / 1000).toFixed(1)} s`); r(e.data); } }; w.postMessage({ type: 'solve', id: 1, ...msg }); }) };
+}
+const NEW = solver('../js/solver.js'), OLD = params.has('old') ? solver('./old-solver.tmp.js') : null;
+await NEW.ready; if (OLD) await OLD.ready;
+
+// How close a rebuild is to the real game.
+function compare(game, moves) {
+  const key = t => t.slice().sort((a, b) => a - b).join(',');
+  const truthAt = new Map(game.truth.map((m, k) => [key(m.tiles), k]));
+  const got = moves.map((m, k) => ({ k, t: truthAt.get(key(m.tiles)) }));
+  const matched = got.filter(g => g.t !== undefined);
+  let agree = 0, pairs = 0;
+  for (let a = 0; a < matched.length; a++) for (let b = a + 1; b < matched.length; b++) { pairs++; if (matched[a].t < matched[b].t) agree++; }
+  const samePlayer = matched.filter(g => g.k % 2 === game.truth[g.t].player).length;
+  return { moves: matched.length / game.truth.length, order: pairs ? agree / pairs : 1, player: matched.length ? samePlayer / matched.length : 0, count: moves.length, real: game.truth.length };
+}
+
+const rows = [];
+const sum = {};
+const add = (name, r, ms, extra = {}) => {
+  const s = sum[name] = sum[name] || { moves: 0, order: 0, player: 0, ms: 0, n: 0, wasted: 0, gap0: 0 };
+  s.moves += r.moves; s.order += r.order; s.player += r.player; s.ms += ms; s.n++;
+  if (extra.wasted != null) s.wasted += extra.wasted;
+  if (extra.gap === 0) s.gap0++;
+};
+for (let g = 0; g < GAMES; g++) {
+  log(`Game ${g + 1}: playing…`);
+  const game = await playGame(1000 + g * 17);
+  const msg = { cells: game.cells, strict: true, seed: 0, timeLimit: 15000, blanks: game.blanks, players: 2 };
+  log(`  ${game.truth.length} moves, ${game.scores.join('–')}. Rebuilding…`);
+  if (OLD) { const t = performance.now(), r = await OLD.solve(msg); if (r.ok) { const jj = await NEW.judge({ ...msg, order: r.moves.map(m => m.tiles) }); add('old', compare(game, r.moves), performance.now() - t, { wasted: jj.wasted }); } }
+  const tj = await NEW.judge({ ...msg, order: game.truth.map(m => m.tiles), targets: game.scores });
+  const tj0 = await NEW.judge({ ...msg, order: game.truth.map(m => m.tiles) });
+  log(`    true order: cost ${tj0.cost?.toFixed(1)} (with scores ${tj.cost?.toFixed(1)}, gap ${tj.gap}), wasted ${tj.wasted}, valid ${tj.valid}`);
+  let t = performance.now(), r = await NEW.solve(msg);
+  if (r.ok) { const jj = await NEW.judge({ ...msg, order: r.moves.map(m => m.tiles) }); log(`    rebuilt: cost ${jj.cost?.toFixed(1)}, wasted ${jj.wasted}, movegen ${JSON.stringify(r.stats)}`); }
+  if (r.ok) add('new', compare(game, r.moves), performance.now() - t, { wasted: r.realism.wasted });
+  t = performance.now(); r = await NEW.solve({ ...msg, targets: game.scores });
+  if (r.ok) { const jj = await NEW.judge({ ...msg, order: r.moves.map(m => m.tiles), targets: game.scores }); log(`    rebuilt with scores: cost ${jj.cost?.toFixed(1)}, gap ${jj.gap}, wasted ${jj.wasted}, totals ${r.realism.totals.join("–")} vs sheet ${game.scores.join("–")}, bingos ${r.moves.filter(m => m.tiles.length === 7).length} vs ${game.truth.filter(m => m.tiles.length === 7).length}`); }
+  if (r.ok) add('new + scores', compare(game, r.moves), performance.now() - t, { wasted: r.realism.wasted, gap: r.realism.gap });
+}
+const pc = x => (100 * x).toFixed(0) + '%';
+let html = '<table><tr><th>solver</th><th>real moves recovered</th><th>pairs in the right order</th><th>right player</th><th>points left on the table per game</th><th>scores matched</th><th>seconds</th></tr>';
+const results = {};
+for (const [name, s] of Object.entries(sum)) {
+  results[name] = { moves: pc(s.moves / s.n), order: pc(s.order / s.n), player: pc(s.player / s.n), wasted: (s.wasted / s.n).toFixed(0), matched: name === 'new + scores' ? `${s.gap0}/${s.n}` : '–', secs: (s.ms / s.n / 1000).toFixed(1) };
+  const r = results[name];
+  html += `<tr><td>${name}</td><td>${r.moves}</td><td>${r.order}</td><td>${r.player}</td><td>${r.wasted}</td><td>${r.matched}</td><td>${r.secs}</td></tr>`;
+}
+document.getElementById('out').innerHTML = html + '</table>';
+window.benchResults = results;
+log('Done.');
+</script>
+</body>
+</html>

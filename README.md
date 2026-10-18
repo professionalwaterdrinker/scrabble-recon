@@ -4,7 +4,9 @@ Photograph a finished Scrabble board and get the game back, move by move.
 
 1. **Read the photo.** This runs free on your own device: you drag four corners onto the grid, and the app straightens the photo, finds the tiles and reads each letter. Nothing is uploaded. Squares that couldn't be read clearly are flagged.
 2. **Check the board.** Fix misreads in a built-in editor. It flags words that aren't in the word list, tiles that don't connect, and letters that appear more often than a real set allows.
-3. **Rebuild the game.** A solver works backwards from the final board, peeling off one legal play at a time so every earlier position is a valid board made of real words. It tries many orders and keeps the one that reads most like a real game.
+3. **Rebuild the game.** A solver works backwards from the final board, peeling off one legal play at a time so every earlier position is a valid board made of real words. Many orders fit, so it picks the one a real player was most likely to make. For every play it works out the best score the same tiles could have made anywhere on the board at that point: an order where players keep ignoring much bigger spots is unlikely. Seven-tile words are kept whole as bingos. The best few orders are then polished by swapping, merging and splitting plays. If you enter the **final scores** from the score sheet, it also looks for an order whose totals match them.
+
+   [`tools/rebuild-bench.html`](tools/rebuild-bench.html) checks this against games Quackle plays against itself. Across six such games, the rebuilt orders threw away about 30 points a game compared with the best play for the same tiles, down from about 95 before (the real games averaged about 17). About 70% of pairs of plays came out in the right order, up from 60%.
 4. **Replay.** Step through the moves with standard notation (`8H`, `H8`), the words each move formed, scores with premium squares and 50-point bingos, and running totals per player.
 
 5. **Racks.** Under the board, every player's rack is shown at every step: the player who just moved shows the rack they played from, and the others show what they're holding. The app analyses the whole game at once. It considers every order in which each player could have drawn their tiles (each tile drawn before the move that played it, as from a well-shuffled bag) and works out how likely each tile was to be on the rack at that moment.
@@ -64,7 +66,7 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `index.html` | Page markup |
 | `css/style.css` | Styles, with light and dark themes |
 | `js/app.js` | Board editor, checks, scoring, replay |
-| `js/solver.js` | Web worker that reconstructs the move order |
+| `js/solver.js` | Web worker that reconstructs the move order and picks the most realistic one |
 | `js/racks.js` | Works out each player's rack and the bag at every turn |
 | `js/localreader.js` | Free on-device photo reader: corner picker, perspective correction, tile detection, letter matching |
 | `data/words.txt` | ENABLE word list (public domain) plus a few common two-letter additions (QI, ZA, KI, OK, …) |

@@ -140,6 +140,10 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
             <label>Players <select id="players"><option>2</option><option>3</option><option>4</option></select></label>
             <label><input type="checkbox" id="strict" checked> Earlier positions must use dictionary words</label>
           </div>
+          <div class="opts score-in">
+            <span class="hint">Final scores, if you know them:</span>
+            <span id="scoreFields"></span>
+          </div>
           <button class="btn primary big" id="solveBtn" disabled>Loading word list…</button>
           <div class="status" id="solveStatus" hidden></div>
         </div>

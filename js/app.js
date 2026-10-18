@@ -37,7 +37,7 @@ let DICT = null, worker = null, workerReady = false, solveId = 0, visionCtl = nu
 
 /* ---------- persistence (per-viewer draft) ---------- */
 function saveDraft() {
-  try { localStorage.setItem('tilerewind.board', JSON.stringify({ text: boardText(), isSample: S.isSample })); } catch (e) {}
+  try { localStorage.setItem('tilerewind.board', JSON.stringify({ text: boardText(), isSample: S.isSample, scores: readScores(true) })); } catch (e) {}
 }
 function loadDraft() {
   try { const d = JSON.parse(localStorage.getItem('tilerewind.board') || 'null'); if (d && d.text) return d; } catch (e) {}
@@ -355,6 +355,7 @@ function startWorker() {
   worker.onmessage = e => {
     const m = e.data;
     if (m.type === 'ready') { workerReady = true; renderChecks(); if (S.autoSolve) { S.autoSolve = false; runSolve(); } }
+    else if (m.type === 'progress') solveStatus(`<span class="spinner"></span>${escapeHtml(m.text)}`);
     else if (m.type === 'result' && m.id === solveId) onResult(m);
   };
 }
@@ -369,8 +370,25 @@ function post(strict) {
   solveId++;
   $('solveBtn').disabled = true;
   solveStatus(`<span class="spinner"></span>${strict ? 'Working backwards from the final board…' : 'Trying again without checking earlier words…'}`);
-  worker.postMessage({ type: 'solve', id: solveId, cells: S.cells, strict, seed: S.seed, timeLimit: strict ? 15000 : 8000 });
+  worker.postMessage({ type: 'solve', id: solveId, cells: S.cells, strict, seed: S.seed, timeLimit: strict ? 15000 : 8000,
+    blanks: [...S.blanks], players: S.players, targets: readScores() });
 }
+
+// Optional final scores from the score sheet: the rebuild looks for an order whose totals match.
+function renderScoreFields(values) {
+  const n = +$('players').value, old = values || readScores(true) || [];
+  $('scoreFields').innerHTML = Array.from({ length: n }, (_, p) =>
+    `<label>Player ${p + 1} <input type="number" inputmode="numeric" min="-200" max="1500" data-p="${p}" value="${old[p] ?? ''}"></label>`).join('');
+}
+// Scores as numbers (null where blank), or null when none is filled in. `raw` keeps the blanks for saving.
+function readScores(raw) {
+  const inputs = [...document.querySelectorAll('#scoreFields input')];
+  const v = inputs.map(i => i.value.trim() === '' ? null : Math.round(+i.value)).map(x => Number.isFinite(x) ? x : null);
+  if (raw) return v.length ? v : null;
+  return v.some(x => x !== null) ? v : null;
+}
+$('players').addEventListener('change', () => { renderScoreFields(); saveDraft(); });
+$('scoreFields').addEventListener('change', saveDraft);
 function onResult(m) {
   if (!m.ok && m.strict) {
     // fall back to a geometry-only rebuild
@@ -384,7 +402,7 @@ function onResult(m) {
       : 'No order of moves fits this board. A tile is probably misread or missing: check the flagged words.', 'err');
     return;
   }
-  const note = m.strict ? '' : (S.fallback === 'timeout'
+  let note = m.strict ? '' : (S.fallback === 'timeout'
     ? 'The dictionary search ran out of time, so earlier positions may include partial words that are not in the word list.'
     : 'No order fits with dictionary words at every stage, so earlier positions may include partial words. A misread tile is the usual cause.');
   S.fallback = null;
@@ -392,7 +410,12 @@ function onResult(m) {
   S.racks = deduceRacks(S.moves, S.cells, S.blanks, S.players);
   S.est = estimateRacks(S.moves, S.cells, S.blanks, S.players, S.racks);
   S.preview = null; QK.results = {}; QK.sims = {}; QK.token = null;
-  S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note };
+  const targets = readScores();
+  if (targets && m.realism && m.realism.gap !== null) {
+    note = (note ? note + ' ' : '') + (m.realism.gap === 0 ? 'The totals match the final scores you entered.'
+      : `The closest order found is ${m.realism.gap} point${m.realism.gap === 1 ? '' : 's'} off the final scores you entered. An exchange, a pass or a misread tile can explain the difference.`);
+  }
+  S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note, realism: m.realism };
   solveStatus('');
   S.step = 1;
   setMode('replay');
@@ -993,6 +1016,7 @@ $('editBtn').onclick = () => setMode('setup');
 /* ---------- boot ---------- */
 buildBoard();
 const draft = loadDraft();
+renderScoreFields(draft && draft.scores);
 if (draft) { setFromRows(draft.text.split('\n')); S.isSample = !!draft.isSample; }
 else { setFromRows(SAMPLE); S.isSample = true; }
 S.autoSolve = S.isSample;
