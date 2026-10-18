@@ -70,6 +70,20 @@ try { const sk = localStorage.getItem('mabble.skin'), f = { brute: 'https://font
         <span class="stepnum" id="tNum">0 / 0</span>
       </div>
       <div class="shelves" id="pxRackBox" hidden>
+        <!-- the tile bag tiles are drawn from (felt skin only) -->
+        <div class="tile-bag" id="tileBag" aria-hidden="true">
+          <svg class="bag-art" viewBox="0 0 64 72" focusable="false">
+            <g class="bag-peek"><rect x="19" y="5" width="12" height="13" rx="2" transform="rotate(-14 25 11)"/><rect x="33" y="3" width="12" height="13" rx="2" transform="rotate(11 39 9)"/></g>
+            <path class="bag-body" d="M20 27 C5 35 3 61 15 68 Q32 74 49 68 C61 61 59 35 44 27 Q32 31 20 27 Z"/>
+            <path class="bag-neck" d="M18 21 Q32 13 46 21 L44 28 Q32 24 20 28 Z"/>
+            <path class="bag-string" d="M18 26 Q32 32 46 26"/>
+            <circle class="bag-knot" cx="46" cy="27" r="3"/>
+            <path class="bag-string" d="M46 29 L50 37 M46 29 L43 38"/>
+            <path class="bag-shine" d="M15 43 Q13 55 19 63"/>
+          </svg>
+          <span class="bag-label">MABBLE</span>
+          <span class="bag-count" id="tileBagCount"></span>
+        </div>
         <div id="pxRacks"></div>
         <p class="px-live" id="pxLive" aria-live="polite"></p>
         <p class="hint px-help">Tap a tile, then a square. Or tap a square and type; tap it again or press <span class="kbd">Space</span> to switch across or down. <span class="kbd">Enter</span> plays, <span class="kbd">Backspace</span> takes back a tile, <span class="kbd">Esc</span> recalls them all.</p>

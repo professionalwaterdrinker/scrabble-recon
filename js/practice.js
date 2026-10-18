@@ -15,6 +15,8 @@ export function createPractice(ctx) {
   let cursor = CENTER, dir = 0; // typing cursor on the board
   let pending = new Map();      // square -> { slot, ch, blank } placed but not yet played
   let swap = null;              // Set of rack slots chosen for an exchange
+  let drawn = [];               // tiles just drawn from the bag, waiting to be animated
+  const arriving = new Set();   // 'player:slot' keys of tiles still flying in
   let preview = null;           // { k, key, cells, blanks, ghost } while previewing a Quackle play
   let viewing = null;           // history entry whose analysis is shown
   let message = { text: '', cls: '' };
@@ -36,7 +38,11 @@ export function createPractice(ctx) {
     message = { text: 'Player 1 to start. Your first word must cover the centre star.', cls: '' };
     save();
   }
-  function draw(p) { while (G.racks[p].length < RACK && G.bag.length) G.racks[p].push(G.bag.pop()); }
+  function draw(p) {
+    const from = G.racks[p].length;
+    while (G.racks[p].length < RACK && G.bag.length) G.racks[p].push(G.bag.pop());
+    for (let k = from; k < G.racks[p].length; k++) drawn.push({ p, k });
+  }
   function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G)); } catch (e) {} }
   function load() {
     try { const g = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (g && g.version === 1) { G = g; return true; } } catch (e) {}
@@ -360,13 +366,13 @@ export function createPractice(ctx) {
     const mine = G.racks[p].map((ch, k) => {
       const cls = ['pxtile', used.has(k) ? 'gone' : '', sel === k ? 'picked' : '', swap && swap.has(k) ? 'swap' : ''].filter(Boolean).join(' ');
       const face = ch === '?' ? '' : `${ch}<i>${VAL[ch]}</i>`;
-      return `<button type="button" class="rtile ${cls}" data-slot="${k}" ${used.has(k) ? 'disabled' : ''} aria-label="${ch === '?' ? 'Blank' : ch}">${face}</button>`;
+      return `<button type="button" class="rtile ${cls} ${arriving.has(p + ':' + k) ? 'arriving' : ''}" data-slot="${k}" data-tile="${p}:${k}" ${used.has(k) ? 'disabled' : ''} aria-label="${ch === '?' ? 'Blank' : ch}">${face}</button>`;
     }).join('');
-    const o = 1 - p, backs = G.racks[o].map(() => '<span class="rtile back" aria-hidden="true"></span>').join('');
+    const o = 1 - p, backs = G.racks[o].map((_, k) => `<span class="rtile back ${arriving.has(o + ':' + k) ? 'arriving' : ''}" data-tile="${o}:${k}" aria-hidden="true"></span>`).join('');
     box.innerHTML = `
-      <div class="shelf mover"><div class="shelf-head"><b>Player ${p + 1}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : 'your turn'}</span></div>
+      <div class="shelf mover" data-player="${p}"><div class="shelf-head"><b>Player ${p + 1}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : 'your turn'}</span></div>
         <div class="rack px-rack">${mine || '<span class="hint">No tiles left</span>'}</div></div>
-      <div class="shelf"><div class="shelf-head"><b>Player ${o + 1}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">face down</span></div>
+      <div class="shelf" data-player="${o}"><div class="shelf-head"><b>Player ${o + 1}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">face down</span></div>
         <div class="rack">${backs || '<span class="hint">No tiles left</span>'}</div></div>`;
   }
 
@@ -385,9 +391,53 @@ export function createPractice(ctx) {
       <div class="pb-total"><span>${p ? escapeHtml(p.word) + (extras.length ? ` <em>${extras.join(' ')}</em>` : '') : 'Place tiles to score'}</span><b class="${p ? 'pop' : ''}">${p ? ev.score : 0}</b></div>`;
   }
 
+  // Felt skin: tiles fly out of the bag one after another, like cards dealt from a deck.
+  function takeDraws() {
+    const list = drawn; drawn = [];
+    const bag = $('tileBag');
+    const on = document.documentElement.dataset.skin === 'felt' && !matchMedia('(prefers-reduced-motion: reduce)').matches
+      && bag && bag.offsetParent !== null && typeof Element.prototype.animate === 'function';
+    if (!on) return [];
+    list.forEach(t => arriving.add(t.p + ':' + t.k));
+    return list;
+  }
+  function launch(list) {
+    const bag = $('tileBag'), mouth = bag.querySelector('.bag-art').getBoundingClientRect();
+    const bx = mouth.left + mouth.width / 2, by = mouth.top + mouth.height * 0.3, count = $('tileBagCount');
+    let left = list.length;
+    count.textContent = G.bag.length + left;
+    list.forEach((t, n) => setTimeout(() => {
+      const key = t.p + ':' + t.k, el = $('pxRacks').querySelector(`[data-tile="${key}"]`);
+      count.textContent = G.bag.length + --left;
+      bag.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12, .9)' }, { transform: 'scale(.96, 1.05)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+      if (!el) { arriving.delete(key); return; }
+      const r = el.getBoundingClientRect(), ghost = el.cloneNode(true);
+      ghost.classList.remove('arriving', 'picked'); ghost.classList.add('flying');
+      Object.assign(ghost.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+      document.body.appendChild(ghost);
+      const dx = bx - (r.left + r.width / 2), dy = by - (r.top + r.height / 2), spin = n % 2 ? 24 : -30;
+      const land = () => {
+        ghost.remove(); arriving.delete(key);
+        const now = $('pxRacks').querySelector(`[data-tile="${key}"]`);
+        if (now) { now.classList.remove('arriving'); now.animate([{ transform: 'translateY(-6px) scale(1.06)' }, { transform: 'none' }], { duration: 200, easing: 'ease-out' }); }
+      };
+      ghost.animate([
+        { transform: `translate(${dx}px, ${dy}px) scale(.3) rotate(${spin}deg)`, opacity: 0 },
+        { transform: `translate(${dx * .45}px, ${dy * .45 - 70}px) scale(.9) rotate(${spin / 3}deg)`, opacity: 1, offset: .45 },
+        { transform: 'translate(0, -10px) scale(1.08) rotate(-3deg)', offset: .85 },
+        { transform: 'none' },
+      ], { duration: 560, easing: 'cubic-bezier(.25, .7, .3, 1)' }).finished.then(land, land);
+    }, n * 120));
+    // whatever happens, nothing stays hidden for long
+    setTimeout(() => { if (!arriving.size) return; arriving.clear(); $('pxRacks').querySelectorAll('.arriving').forEach(e => e.classList.remove('arriving')); }, list.length * 120 + 1500);
+  }
+
   function render() {
     if (!G) return;
+    const fly = takeDraws();
     renderRack();
+    $('tileBagCount').textContent = G.bag.length;
+    if (fly.length) requestAnimationFrame(() => launch(fly));
     const ev = evaluate();
     // live check of the tentative play
     let live = '';

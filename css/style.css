@@ -1091,3 +1091,47 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
   :root[data-skin="felt"] .felt-swirl, :root[data-skin="felt"] h1, :root[data-skin="felt"] .mark span, :root[data-skin="felt"] .px-rack .rtile,
   :root[data-skin="felt"] .st-tiles.big .st-tile, .px-break .pop { animation: none !important; }
 }
+
+/* Felt: the MABBLE tile bag, and tiles flying from it to the rack */
+.tile-bag { display: none; }
+.rtile.arriving { visibility: hidden; }
+.rtile.flying { position: fixed; z-index: 90; margin: 0; pointer-events: none; animation: none !important; box-sizing: border-box; }
+:root[data-skin="felt"] #pxRackBox { position: relative; }
+:root[data-skin="felt"] .tile-bag { display: grid; justify-items: center; align-content: start; gap: 2px; width: 92px; position: relative; transform-origin: 50% 90%; }
+:root[data-skin="felt"] .bag-art { width: 84px; height: 94px; overflow: visible; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .35)); animation: felt-bob 3.6s ease-in-out infinite; }
+.bag-peek rect { fill: var(--tile); stroke: #2b2b33; stroke-width: 2; }
+.bag-body { fill: #8a5bd6; stroke: #2a1a4a; stroke-width: 3; stroke-linejoin: round; }
+.bag-neck { fill: #6b3fb3; stroke: #2a1a4a; stroke-width: 3; stroke-linejoin: round; }
+.bag-string { fill: none; stroke: #f5c04a; stroke-width: 3; stroke-linecap: round; }
+.bag-knot { fill: #f5c04a; stroke: #7a5300; stroke-width: 1.5; }
+.bag-shine { fill: none; stroke: rgba(255, 255, 255, .35); stroke-width: 3; stroke-linecap: round; }
+:root[data-skin="felt"] .bag-label { position: absolute; top: 56px; left: 50%; transform: translateX(-50%) rotate(-4deg); padding: 1px 6px; border-radius: 4px;
+  background: #2a1a4a; color: var(--hot); font: 400 15px/1.1 var(--f-display); letter-spacing: .08em; box-shadow: 0 2px 0 rgba(0, 0, 0, .35); white-space: nowrap; }
+:root[data-skin="felt"] .bag-count { min-width: 38px; text-align: center; padding: 1px 8px; border-radius: 6px; background: var(--panel-2); border: 2px solid var(--line);
+  color: #fff; font: 400 18px/1.2 var(--f-display); box-shadow: 0 3px 0 var(--line); }
+/* wide screens: the bag sits in the margin to the left of the board, beside the racks */
+@media (min-width: 1380px) {
+  :root[data-skin="felt"] .tile-bag { position: absolute; right: calc(100% + 22px); top: 0; }
+}
+/* narrower screens: the bag takes the left end of the rack area under the board */
+@media (max-width: 1379px) {
+  :root[data-skin="felt"] #pxRackBox:not([hidden]) { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
+  :root[data-skin="felt"] #pxRackBox > :not(.tile-bag) { grid-column: 2; }
+  :root[data-skin="felt"] .tile-bag { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
+}
+/* phones: a compact bag in a row above the racks, so the tiles keep the full width */
+@media (max-width: 560px) {
+  :root[data-skin="felt"] #pxRackBox:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+  :root[data-skin="felt"] #pxRackBox > :not(.tile-bag) { grid-column: 1; }
+  :root[data-skin="felt"] .tile-bag { grid-row: auto; grid-auto-flow: column; align-items: center; justify-self: start; width: auto; gap: 10px; }
+  :root[data-skin="felt"] .bag-art { width: 50px; height: 56px; }
+  :root[data-skin="felt"] .bag-label { position: static; transform: rotate(-3deg); font-size: 14px; }
+  :root[data-skin="felt"] .bag-count { font-size: 16px; }
+}
+/* with the bag beside them the racks get narrower: put each player's name above their tiles */
+:root[data-skin="felt"] #pxRacks { container-type: inline-size; display: grid; gap: 8px; }
+@container (max-width: 460px) {
+  :root[data-skin="felt"] #pxRacks .shelf { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  :root[data-skin="felt"] #pxRacks .shelf-head { grid-auto-flow: column; justify-content: start; gap: 10px; align-items: baseline; }
+}
+@media (prefers-reduced-motion: reduce) { :root[data-skin="felt"] .bag-art { animation: none; } }
