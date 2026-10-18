@@ -17,7 +17,8 @@ export function createStudy(ctx) {
     // history view
     histTab: 'sessions', sel: new Set(), cardFilter: 'progress', cardQuery: '', cardShown: 100, openSession: null, undo: null,
   };
-  try { st.mode = localStorage.getItem('mabble.studyMode') || 'flip'; } catch (e) {}
+  st.practiceMode = 'type';
+  try { st.mode = localStorage.getItem('mabble.studyMode') || 'flip'; st.practiceMode = localStorage.getItem('mabble.practiceMode') || 'type'; } catch (e) {}
 
   /* ---------- data ---------- */
   async function ready() {
@@ -46,14 +47,17 @@ export function createStudy(ctx) {
     if (card.kind === 'hook') return answers.length ? plural(answers.length, 'hook') : 'no hooks';
     return plural(answers.length, 'letter');
   }
-  function answersHtml(card, answers, { defs = true } = {}) {
-    if (card.kind === 'anagram') return `<ul class="st-words">${answers.map(w => `<li><button type="button" class="st-word" data-word="${w}">${wordWithHooks(w)}</button>${defs && st.open.has(w) ? `<div class="st-def" data-def="${w}">${defHtml(w)}</div>` : ''}</li>`).join('')}</ul>`;
+  // `found` (after a skip): the targets the person typed, so the rest can be shown as missed
+  function answersHtml(card, answers, { defs = true, found = null } = {}) {
+    const mark = key => found ? (found.has(key) ? ' got' : ' miss') : '';
+    if (card.kind === 'anagram') return `<ul class="st-words">${answers.map(w => `<li class="${mark(w).trim()}"><button type="button" class="st-word" data-word="${w}">${wordWithHooks(w)}</button>${defs && st.open.has(w) ? `<div class="st-def" data-def="${w}">${defHtml(w)}</div>` : ''}</li>`).join('')}</ul>`;
     if (card.kind === 'hook') {
       const front = answers.filter(a => a.endsWith('-')).map(a => a[0]), back = answers.filter(a => a.startsWith('-')).map(a => a[1]);
+      const words = front.map(L => L + card.prompt).concat(back.map(L => card.prompt + L));
       return `<div class="st-hooks"><span class="st-pos">Before</span><span class="hk-side">${front.join(' ') || '–'}</span><span class="st-pos">After</span><span class="hk-side">${back.join(' ') || '–'}</span></div>
-        <p class="st-sub">${front.map(L => L + card.prompt).concat(back.map(L => card.prompt + L)).join(' · ') || 'Nothing hooks onto this word.'}</p>`;
+        <p class="st-sub">${words.map(w => `<span class="st-hw${mark(w)}">${w}</span>`).join(' · ') || 'Nothing hooks onto this word.'}</p>`;
     }
-    return `<div class="st-stem">${answers.map(a => `<span class="st-stem-row"><b>${a.letter}</b>${a.words.join(' ')}</span>`).join('')}</div>`;
+    return `<div class="st-stem">${answers.map(a => `<span class="st-stem-row${mark(a.letter)}"><b>${a.letter}</b>${a.words.join(' ')}</span>`).join('')}</div>`;
   }
   const defCache = {};
   function defHtml(w) {
@@ -92,7 +96,7 @@ export function createStudy(ctx) {
     const k = (key, what) => `<li><kbd>${key}</kbd><span>${what}</span></li>`;
     return `<div class="st-help" role="dialog" aria-label="Keyboard shortcuts"><div class="st-help-card">
       <h3>Keyboard shortcuts</h3>
-      <ul>${k('Space', 'Show the answer')}${k('1', 'Again: show it again soon')}${k('2', 'Good')}${k('3', 'Easy')}${k('Enter', 'Check a typed word (empty: show the answer)')}${k('Esc', 'End the session')}${k('/', 'Search a list')}${k('Del', 'Delete the ticked cards (History)')}${k('?', 'Show or hide this')}</ul>
+      <ul>${k('Space', 'Show the answer')}${k('1', 'Again: show it again soon')}${k('2', 'Good')}${k('3', 'Easy')}${k('Enter', 'Check a typed word (empty: skip)')}${k('Esc', 'End the session')}${k('/', 'Search a list')}${k('Del', 'Delete the ticked cards (History)')}${k('?', 'Show or hide this')}</ul>
       <button class="btn" type="button" data-help>Close</button></div></div>`;
   }
 
@@ -234,7 +238,7 @@ export function createStudy(ctx) {
           <span class="st-ring mini" style="--pct:${pct}"><span>${pct}%</span></span>
           <span class="st-session-main"><b>${h.lists.map(listTitle).join(', ') || 'Review'}</b>
             <span class="hint">${fmtDate(h.at)} · ${minutes(h.end - h.at)} · ${h.mode === 'type' ? 'typed' : 'flip cards'}</span></span>
-          <span class="st-session-side">${h.right}/${h.graded}${h.cram ? '<span class="st-tag soft">practice</span>' : ''}${h.finished ? '' : '<span class="st-tag warn">stopped early</span>'}</span>
+          <span class="st-session-side">${h.wordsTotal ? `${h.wordsFound}/${h.wordsTotal} words · ` : ''}${h.right}/${h.graded}${h.cram ? '<span class="st-tag soft">practice</span>' : ''}${h.finished ? '' : '<span class="st-tag warn">stopped early</span>'}</span>
         </button>
         ${open ? `<div class="st-session-detail">${h.missed.length ? `<span class="hint">Missed at first:</span> ${h.missed.map(id => `<span class="st-chip miss">${parseId(id).prompt}</span>`).join(' ')}` : '<span class="hint">Every card right first time.</span>'}
           <button type="button" class="linkish" data-del-session="${h.at}">Remove from history</button></div>` : ''}
@@ -293,6 +297,29 @@ export function createStudy(ctx) {
   }
 
   /* ---------- review session ---------- */
+  // What can be typed for a card. Anagrams: the words. Hooks: the hooked words (BAA, AAH).
+  // Stems: the extra letters, credited by typing the letter or any seven it makes.
+  function targetsFor(card) {
+    const a = answersFor(st.index, card);
+    if (card.kind === 'anagram') return a;
+    if (card.kind === 'hook') return a.map(h => h.endsWith('-') ? h[0] + card.prompt : card.prompt + h[1]);
+    return a.map(x => x.letter);
+  }
+  // Which target a typed word counts for, if any.
+  function matchTyped(card, w, targets) {
+    if (card.kind !== 'stem') return targets.includes(w) ? w : null;
+    if (w.length === 1) return targets.includes(w) ? w : null;
+    if (w.length !== card.prompt.length + 1 || !st.index.set.has(w)) return null;
+    for (const L of targets) if (alphagram(card.prompt + L) === alphagram(w)) return L;
+    return null;
+  }
+  function missHint(card, w) {
+    if (card.kind === 'anagram') return alphagram(w) === card.prompt ? `${w} isn't in ${ctx.lexicon().name}.` : `${w} doesn't use these letters.`;
+    if (card.kind === 'hook') return w.length === card.prompt.length + 1 && (w.startsWith(card.prompt) || w.endsWith(card.prompt))
+      ? `${w} isn't in ${ctx.lexicon().name}.` : `Add one letter before or after ${card.prompt}.`;
+    return `Type the extra letter, or a ${card.prompt.length + 1}-letter word it makes.`;
+  }
+
   function startSession(ids, cram, source) {
     // spread new cards among the reviews instead of saving them all for the end
     let queue = ids;
@@ -303,21 +330,40 @@ export function createStudy(ctx) {
       while (f < fresh.length) queue.push(fresh[f++]);
     }
     if (!queue.length) return;
-    st.session = { queue, pos: 0, cram, source, total: queue.length, passed: 0, right: 0, missed: new Set(), flipped: false, found: [], msg: '', t0: Date.now(), cardStart: Date.now(), log: [], recorded: false };
+    // in typing mode the progress bar counts words: every target of every card in the session
+    const unique = [...new Set(queue)], targets = new Map(unique.map(id => [id, targetsFor(parseId(id))]));
+    st.session = {
+      queue, pos: 0, cram, source, total: queue.length, passed: 0, right: 0, missed: new Set(), flipped: false, reveal: false,
+      found: [], msg: '', t0: Date.now(), cardStart: Date.now(), log: [], recorded: false,
+      mode: cram ? st.practiceMode : st.mode, targets, wordsTotal: [...targets.values()].reduce((n, t) => n + t.length, 0), got: new Map(),
+    };
     st.view = 'session'; render();
   }
+  const wordsGot = s => [...s.got.values()].reduce((n, set) => n + set.size, 0);
+
   function sessionView() {
     const s = st.session, id = s.queue[s.pos], card = parseId(id), answers = answersFor(st.index, card);
-    const typing = st.mode === 'type' && card.kind === 'anagram' && !s.flipped;
+    const targets = s.targets.get(id) || targetsFor(card);
+    // typing needs something to type; a word with no hooks is just flipped and graded
+    const canType = s.mode === 'type' && targets.length > 0;
+    const typing = canType && !s.flipped;
     const label = { anagram: 'Anagram', hook: 'Hooks', stem: 'Bingo stem' }[card.kind];
-    const ask = card.kind === 'anagram' ? 'What words do these letters make?' : card.kind === 'hook' ? 'Which letters go before or after it?' : 'Which letters make a seven-letter word?';
+    const ask = card.kind === 'anagram' ? 'What words do these letters make?'
+      : card.kind === 'hook' ? (canType ? 'Type each word you can make by adding one letter.' : 'Which letters go before or after it?')
+      : (canType ? 'Type each extra letter, or a seven it makes.' : 'Which letters make a seven-letter word?');
     const c = st.vault.card(id);
     const hint = g => { if (g === 0) return '< 5 min'; const box = Math.min(INTERVALS.length - 1, Math.max(1, (c ? c.box : 0) + g)); const d = INTERVALS[box]; return plural(d, 'day'); };
+    const typedSession = s.mode === 'type';
+    const bar = typedSession
+      ? `${progress(wordsGot(s), s.wordsTotal, 'big')}<span class="st-count" title="Words found this session">${wordsGot(s)} / ${s.wordsTotal} words</span>`
+      : `${progress(s.passed, s.total, 'big')}<span class="st-count">${s.passed}/${s.total}</span>`;
+    const slot = t => '·'.repeat(t.length);
+    const foundNow = new Set(s.found);
     return `<div class="st-wrap st-session">
       <div class="st-sbar">
         <button type="button" class="st-x" data-end aria-label="End session">✕</button>
-        ${progress(s.passed, s.total, 'big')}
-        <span class="st-count">${s.passed}/${s.total}</span>
+        ${bar}
+        <button type="button" class="st-modeswitch" data-smode="${typedSession ? 'flip' : 'type'}" title="Switch how you answer">${typedSession ? 'Typing' : 'Flipping'}</button>
       </div>
       <div class="st-stage">
         <div class="st-flash ${s.flipped ? 'flipped' : ''} ${s.flash || ''}" id="stFlash">
@@ -327,25 +373,30 @@ export function createStudy(ctx) {
             <p class="st-ask">${ask}</p>
             <span class="st-cue big">${cue(card, answers)}</span>
             ${typing ? `<div class="st-type">
-                <div class="st-found">${answers.map(w => s.found.includes(w) ? `<span class="st-chip ok">${w}</span>` : `<span class="st-chip blank">${'·'.repeat(w.length)}</span>`).join('')}</div>
-                <input id="stInput" class="st-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a word, press Enter" aria-label="Type a word">
+                <div class="st-found">${card.kind === 'stem'
+                  // stems can take twenty-odd letters: show the ones found and how many are left
+                  ? s.found.map(t => `<span class="st-chip ok">${t}</span>`).join('') + (targets.length > s.found.length ? `<span class="st-chip blank">${targets.length - s.found.length} more</span>` : '')
+                  : targets.map(t => foundNow.has(t) ? `<span class="st-chip ok">${t}</span>` : `<span class="st-chip blank">${slot(t)}</span>`).join('')}</div>
+                <input id="stInput" class="st-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type a word" aria-label="Type a word, then press Enter">
                 <p class="st-msg" aria-live="polite">${escapeHtml(s.msg)}</p>
               </div>` : `<p class="st-key"><kbd>Space</kbd> to show the answer</p>`}
           </div>
           <div class="st-face back">
-            <span class="st-kind">${label}</span>
+            <span class="st-kind">${s.reveal ? `${label} · found ${foundNow.size} of ${targets.length}` : label}</span>
             <div class="st-prompt small">${tiles(card.prompt)}</div>
-            ${answersHtml(card, answers)}
+            ${answersHtml(card, answers, { found: s.reveal ? foundNow : null })}
             ${card.kind === 'anagram' ? '<p class="st-credit">Tap a word for its definition.</p>' : ''}
           </div>
         </div>
       </div>
-      <div class="st-grades ${s.flipped ? '' : 'waiting'}">
-        ${s.flipped ? `
+      <div class="st-grades ${s.flipped && !s.reveal ? '' : 'waiting'}">
+        ${s.reveal ? `<button type="button" class="btn primary big" data-next>Next <kbd>Enter</kbd></button>`
+        : s.flipped ? `
           <button type="button" class="st-grade again" data-grade="0"><b>Again</b><span>${hint(0)}</span><kbd>1</kbd></button>
           <button type="button" class="st-grade good" data-grade="1"><b>Good</b><span>${hint(1)}</span><kbd>2</kbd></button>
           <button type="button" class="st-grade easy" data-grade="2"><b>Easy</b><span>${hint(2)}</span><kbd>3</kbd></button>`
-        : `<button type="button" class="btn primary big" data-flip>${typing ? 'Show the answer' : 'Show the answer'}</button>`}
+        : typing ? `<button type="button" class="btn big st-skip" data-skip>Skip <span class="hint">or press Enter on an empty box</span></button>`
+        : `<button type="button" class="btn primary big" data-flip>Show the answer</button>`}
       </div>
     </div>`;
   }
@@ -356,6 +407,11 @@ export function createStudy(ctx) {
     const card = parseId(s.queue[s.pos]);
     if (card.kind === 'anagram') { const a = answersFor(st.index, card); if (a[0]) st.open.add(a[0]); }
     render();
+  }
+  // Skip: show what was missed, then move on. The card counts as a miss and comes back later.
+  function skip() {
+    const s = st.session; if (!s || s.flipped) return;
+    s.reveal = true; s.msg = ''; flip();
   }
   function grade(g) {
     const s = st.session; if (!s || !s.flipped) return;
@@ -370,7 +426,7 @@ export function createStudy(ctx) {
       s.passed++;
       if (!s.missed.has(id)) s.right++;
     }
-    s.pos++; s.flipped = false; s.found = []; s.msg = ''; s.cardStart = Date.now(); st.open.clear();
+    s.pos++; s.flipped = false; s.reveal = false; s.found = []; s.msg = ''; s.cardStart = Date.now(); st.open.clear();
     if (s.pos >= s.queue.length) { finishSession(true); st.view = 'done'; render(); return; }
     render();
   }
@@ -382,8 +438,9 @@ export function createStudy(ctx) {
     const ids = [...new Set(s.log.map(x => x.id))];
     const lists = s.source ? [s.source] : [...new Set(ids.map(id => (st.vault.card(id) || {}).list).filter(Boolean))];
     st.vault.recordSession({
-      at: s.t0, end: Date.now(), mode: st.mode, cram: !!s.cram, lists, planned: s.total, graded: ids.length,
+      at: s.t0, end: Date.now(), mode: s.mode, cram: !!s.cram, lists, planned: s.total, graded: ids.length,
       right: s.right, passed: s.passed, missed: [...s.missed], finished,
+      ...(s.mode === 'type' ? { wordsFound: wordsGot(s), wordsTotal: s.wordsTotal } : {}),
     });
   }
   function endSession() {
@@ -392,13 +449,16 @@ export function createStudy(ctx) {
     st.view = s && s.passed ? 'done' : 'review'; render();
   }
   function typed(value) {
-    const s = st.session, card = parseId(s.queue[s.pos]), answers = answersFor(st.index, card);
-    const w = value.trim().toUpperCase();
-    if (!w) { s.flipped = true; s.flash = ''; render(); return; }      // empty Enter: show the answer
-    if (s.found.includes(w)) { feedback('Already found.', 'shake'); return; }
-    if (answers.includes(w)) {
-      s.found.push(w); s.msg = '';
-      if (s.found.length === answers.length) {
+    const s = st.session, id = s.queue[s.pos], card = parseId(id), targets = s.targets.get(id) || targetsFor(card);
+    const w = value.trim().toUpperCase().replace(/[^A-Z]/g, '');
+    if (!w) { skip(); return; }                                   // empty Enter: skip
+    const hit = matchTyped(card, w, targets);
+    if (hit && s.found.includes(hit)) { feedback(card.kind === 'stem' ? `${hit} is already found.` : 'Already found.', 'shake'); return; }
+    if (hit) {
+      s.found.push(hit); s.msg = '';
+      if (!s.got.has(id)) s.got.set(id, new Set());
+      s.got.get(id).add(hit);
+      if (s.found.length === targets.length) {
         // all of them: a quick green pulse, then the next card on its own
         s.flash = 'right'; render();
         const quick = Date.now() - s.cardStart < 8000;
@@ -407,7 +467,7 @@ export function createStudy(ctx) {
       }
       render(); return;
     }
-    feedback(alphagram(w) === card.prompt ? `${w} isn't in ${ctx.lexicon().name}.` : `${w} doesn't use these letters.`, 'shake');
+    feedback(missHint(card, w), 'shake');
   }
   function feedback(msg, cls) {
     const s = st.session; s.msg = msg; render();
@@ -420,7 +480,7 @@ export function createStudy(ctx) {
     return shell(`<div class="st-done">
       <div class="st-ring" style="--pct:${pct}"><span>${pct}%</span></div>
       <h2>${pct >= 90 ? 'Brilliant!' : pct >= 70 ? 'Nice work' : 'Good practice'}</h2>
-      <p>${plural(s.right, 'card')} right first time out of ${s.total}, in about ${plural(mins, 'minute')}.${!s.cram && next ? ` Next review ${when(next)}.` : ''}</p>
+      <p>${s.mode === 'type' ? `You found ${wordsGot(s)} of ${s.wordsTotal} words. ` : ''}${plural(s.right, 'card')} right first time out of ${s.total}, in about ${plural(mins, 'minute')}.${!s.cram && next ? ` Next review ${when(next)}.` : ''}</p>
       <div class="st-actions center">
         <button type="button" class="btn primary" data-go="review">Done</button>
         ${s.missed.size ? `<button type="button" class="btn" data-again>Go over the ${plural(s.missed.size, 'miss')} again</button>` : ''}
@@ -455,6 +515,15 @@ export function createStudy(ctx) {
     else if (d.mode) { st.mode = d.mode; try { localStorage.setItem('mabble.studyMode', st.mode); } catch (e) {} render(); }
     else if (d.start !== undefined) startSession(null, false);
     else if (d.flip !== undefined) flip();
+    else if (d.skip !== undefined) skip();
+    else if (d.next !== undefined) grade(0);
+    else if (d.smode) {
+      // switch how this session is answered, and remember it for next time
+      const s = st.session; s.mode = d.smode;
+      if (s.cram) st.practiceMode = d.smode; else st.mode = d.smode;
+      try { localStorage.setItem(s.cram ? 'mabble.practiceMode' : 'mabble.studyMode', d.smode); } catch (e) {}
+      render();
+    }
     else if (d.grade) grade(+d.grade);
     else if (d.end !== undefined) endSession();
     else if (d.again !== undefined) startSession([...st.session.missed], true, 'retry');
@@ -494,6 +563,7 @@ export function createStudy(ctx) {
     if (st.view === 'session') {
       if (e.key === 'Escape') { e.preventDefault(); endSession(); return; }
       if (inField) return;
+      if (st.session.reveal && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); grade(0); return; }
       if (e.key === ' ') { e.preventDefault(); flip(); }
       else if (st.session.flipped && ['1', '2', '3'].includes(e.key)) { e.preventDefault(); grade(+e.key - 1); }
       else if (st.session.flipped && e.key === 'Enter') { e.preventDefault(); grade(1); }
