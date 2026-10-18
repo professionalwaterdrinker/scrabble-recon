@@ -409,7 +409,8 @@ export function createPractice(ctx) {
     list.forEach((t, n) => setTimeout(() => {
       const key = t.p + ':' + t.k, el = $('pxRacks').querySelector(`[data-tile="${key}"]`);
       count.textContent = G.bag.length + --left;
-      bag.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12, .9)' }, { transform: 'scale(.96, 1.05)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+      // a three-frame squash, held frames like a sprite rather than smooth easing
+      bag.animate([{ transform: 'scale(1.12, .88)', easing: 'step-end' }, { transform: 'scale(.94, 1.08)', easing: 'step-end' }, { transform: 'scale(1)' }], { duration: 240 });
       if (!el) { arriving.delete(key); return; }
       const r = el.getBoundingClientRect(), ghost = el.cloneNode(true);
       ghost.classList.remove('arriving', 'picked'); ghost.classList.add('flying');
