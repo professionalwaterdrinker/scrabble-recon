@@ -1098,12 +1098,12 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 .rtile.flying { position: fixed; z-index: 90; margin: 0; pointer-events: none; animation: none !important; box-sizing: border-box; }
 :root[data-skin="felt"] #pxRackBox { position: relative; }
 :root[data-skin="felt"] .tile-bag { display: grid; justify-items: center; align-content: start; gap: 2px; width: 92px; position: relative; transform-origin: 50% 90%; }
-:root[data-skin="felt"] .bag-art { width: 90px; height: 100px; overflow: visible; image-rendering: pixelated; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .35)); animation: bag-idle 1.4s steps(1, end) infinite; }
+:root[data-skin="felt"] .bag-art { width: 90px; height: 80px; overflow: visible; image-rendering: pixelated; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .35)); animation: bag-idle 1.4s steps(1, end) infinite; }
 /* a two-frame idle, like an old game sprite: up a pixel, down a pixel */
 @keyframes bag-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-/* the bag is an 18 x 20 pixel sprite: flat colours, hard edges, no smoothing */
+/* the bag is an 18 x 16 pixel sprite: flat colours, hard edges, no smoothing */
 .bag-art .k { fill: #1e1033; } .bag-art .pu { fill: #8a5bd6; } .bag-art .ps { fill: #6b3fb3; } .bag-art .pl { fill: #b48cf0; }
-.bag-art .gy { fill: #f5c04a; } .bag-art .gd { fill: #b07d14; } .bag-art .tf { fill: #f4efe3; } .bag-art .te { fill: #c9bfa7; } .bag-art .bd { fill: #2a1a4a; }
+.bag-art .gy { fill: #f5c04a; } .bag-art .gd { fill: #b07d14; } .bag-art .bd { fill: #2a1a4a; }
 .bag-art .bag-word { fill: #f5c04a; font: 400 3.1px "Jersey 10", ui-monospace, monospace; letter-spacing: .12px; }
 :root[data-skin="felt"] .bag-count { min-width: 38px; text-align: center; padding: 1px 8px; border-radius: 6px; background: var(--panel-2); border: 2px solid var(--line);
   color: #fff; font: 400 18px/1.2 var(--f-display); box-shadow: 0 3px 0 var(--line); }
@@ -1122,7 +1122,7 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
   :root[data-skin="felt"] #pxRackBox:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
   :root[data-skin="felt"] #pxRackBox > :not(.tile-bag) { grid-column: 1; }
   :root[data-skin="felt"] .tile-bag { grid-row: auto; grid-auto-flow: column; align-items: center; justify-self: start; width: auto; gap: 10px; }
-  :root[data-skin="felt"] .bag-art { width: 54px; height: 60px; animation-name: bag-idle-small; }
+  :root[data-skin="felt"] .bag-art { width: 54px; height: 48px; animation-name: bag-idle-small; }
   :root[data-skin="felt"] .bag-count { font-size: 16px; }
 }
 /* with the bag beside them the racks get narrower: put each player's name above their tiles */
