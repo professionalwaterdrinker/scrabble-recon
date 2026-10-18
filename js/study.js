@@ -16,7 +16,10 @@ export function createStudy(ctx) {
     cards: {}, filter: '', hide: false, shown: PAGE, open: new Set(), mode: 'flip', help: false, session: null,
     // history view
     histTab: 'sessions', sel: new Set(), cardFilter: 'progress', cardQuery: '', cardShown: 100, openSession: null, undo: null,
+    // practise: the range of card numbers chosen for each list, and whether to shuffle them
+    ranges: {}, shuffle: true,
   };
+  try { st.ranges = JSON.parse(localStorage.getItem('mabble.practiseRanges') || '{}') || {}; st.shuffle = localStorage.getItem('mabble.practiseShuffle') !== 'off'; } catch (e) {}
   st.practiceMode = 'type';
   try { st.mode = localStorage.getItem('mabble.studyMode') || 'flip'; st.practiceMode = localStorage.getItem('mabble.practiceMode') || 'type'; } catch (e) {}
 
@@ -131,8 +134,8 @@ export function createStudy(ctx) {
       <div class="st-actions">
         ${added ? `<span class="st-added">✓ In your reviews · ${p.learned} of ${p.total} learned</span><button type="button" class="btn" data-remove="${l.id}">Remove</button>`
           : `<button type="button" class="btn primary" data-add="${l.id}">Add to my reviews</button>`}
-        <button type="button" class="btn" data-cram="${l.id}">Practise ${Math.min(SESSION_CRAM, cards.length)} now</button>
       </div>
+      ${practiseHtml(l, cards.length)}
       <div class="st-tools">
         <input type="search" id="stFilter" placeholder="Find letters or a word" value="${escapeHtml(st.filter)}" aria-label="Find letters or a word">
         <label class="st-switch"><input type="checkbox" id="stHide" ${st.hide ? 'checked' : ''}><span></span>Hide answers</label>
@@ -148,6 +151,59 @@ export function createStudy(ctx) {
       }).join('') || '<p class="hint">Nothing matches.</p>'}</div>
       ${shown.length > page.length ? `<div class="st-more"><button type="button" class="btn" data-more>Show ${Math.min(PAGE, shown.length - page.length)} more</button><span class="hint">${page.length} of ${shown.length}</span></div>` : ''}
       <p class="st-credit">Tap a word for its definition, from <a href="https://en.wiktionary.org/" target="_blank" rel="noopener">Wiktionary</a> (CC BY-SA). Faint letters either side of a word are its hooks.</p>`);
+  }
+
+  // Practise any run of cards by their number in the list: a two-handled slider and two
+  // number boxes that stay in step, with a running count.
+  function rangeOf(id, n) {
+    const r = st.ranges[id] || [1, Math.min(SESSION_CRAM, n)];
+    const a = Math.max(1, Math.min(n, r[0] | 0 || 1)), b = Math.max(a, Math.min(n, r[1] | 0 || n));
+    return [a, b];
+  }
+  function practiseHtml(l, n) {
+    const [a, b] = rangeOf(l.id, n), pos = v => n > 1 ? ((v - 1) / (n - 1)) * 100 : 0;
+    return `<section class="st-practise" data-list-range="${l.id}" data-n="${n}" aria-label="Practise a range of cards">
+      <div class="st-pr-head"><b>Practise</b><span class="hint">Cards are numbered by ${l.order}.</span></div>
+      <div class="st-pr-row">
+        <label class="st-pr-num">Cards #<input type="number" id="stFrom" min="1" max="${n}" value="${a}" inputmode="numeric" aria-label="First card number"></label>
+        <label class="st-pr-num">to #<input type="number" id="stTo" min="1" max="${n}" value="${b}" inputmode="numeric" aria-label="Last card number"></label>
+        <span class="st-pr-count" id="stPrCount" aria-live="polite">${plural(b - a + 1, 'card')}</span>
+      </div>
+      <div class="st-range" id="stRange" style="--a:${pos(a)}%;--b:${pos(b)}%">
+        <div class="st-range-track"><span class="st-range-fill"></span></div>
+        <input type="range" id="stRangeA" min="1" max="${n}" step="1" value="${a}" aria-label="First card">
+        <input type="range" id="stRangeB" min="1" max="${n}" step="1" value="${b}" aria-label="Last card">
+      </div>
+      <div class="st-pr-row end">
+        <label class="st-check"><input type="checkbox" id="stShuffle" ${st.shuffle ? 'checked' : ''}><span></span>Shuffle</label>
+        <button type="button" class="btn primary" data-practise="${l.id}">Start practising</button>
+      </div>
+    </section>`;
+  }
+  // Keep the slider handles, the number boxes and the count in step without redrawing the
+  // page (a redraw mid-drag would drop the handle). `from` says which control moved.
+  function syncRange(from, commit) {
+    const box = root.querySelector('.st-practise'); if (!box) return;
+    const id = box.dataset.listRange, n = +box.dataset.n;
+    const A = $('stRangeA'), B = $('stRangeB'), F = $('stFrom'), T = $('stTo');
+    let a = from === 'num' ? +F.value : +A.value, b = from === 'num' ? +T.value : +B.value;
+    if (from === 'num' && !commit && (!F.value || !T.value)) return;          // still typing
+    a = Math.max(1, Math.min(n, Math.round(a) || 1)); b = Math.max(1, Math.min(n, Math.round(b) || 1));
+    if (a > b) { if (from === 'a' || (from === 'num' && document.activeElement === F)) b = a; else a = b; }
+    A.value = a; B.value = b;
+    if (from !== 'num' || commit) { F.value = a; T.value = b; }
+    const pos = v => n > 1 ? ((v - 1) / (n - 1)) * 100 : 0;
+    $('stRange').style.setProperty('--a', pos(a) + '%'); $('stRange').style.setProperty('--b', pos(b) + '%');
+    // the left handle sits on top when both are at the far right, so it can still be dragged back
+    A.style.zIndex = a === n ? 3 : '';
+    $('stPrCount').textContent = plural(b - a + 1, 'card');
+    st.ranges[id] = [a, b];
+    try { localStorage.setItem('mabble.practiseRanges', JSON.stringify(st.ranges)); } catch (e) {}
+  }
+  function startPractise(id) {
+    const ids = listIds(id), [a, b] = rangeOf(id, ids.length), pick = ids.slice(a - 1, b);
+    if (st.shuffle) for (let i = pick.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pick[i], pick[j]] = [pick[j], pick[i]]; }
+    startSession(pick, true, id);
   }
 
   function reviewView() {
@@ -508,7 +564,7 @@ export function createStudy(ctx) {
     else if (d.list) { st.view = 'list'; st.listId = d.list; st.shown = PAGE; st.filter = ''; st.open.clear(); render(); scrollTo({ top: 0 }); }
     else if (d.add) { st.vault.addList(d.add, listIds(d.add)); if (st.view !== 'list') st.view = 'review'; render(); }
     else if (d.remove) { st.vault.removeList(d.remove); render(); }
-    else if (d.cram) { const ids = listIds(d.cram).filter(id => { const c = st.vault.card(id); return !c || c.box < 3; }).slice(0, SESSION_CRAM); startSession(ids.length ? ids : listIds(d.cram).slice(0, SESSION_CRAM), true, d.cram); }
+    else if (d.practise) { syncRange('num', true); startPractise(d.practise); }
     else if (d.more !== undefined) { st.shown += PAGE; render(); }
     else if (d.reveal) { st.open.add(d.reveal); render(); }
     else if (d.word) { st.open.has(d.word) ? st.open.delete(d.word) : st.open.add(d.word); render(); }
@@ -539,12 +595,17 @@ export function createStudy(ctx) {
     else if (d.undoClose !== undefined) { st.undo = null; render(); }
   });
   root.addEventListener('input', e => {
+    if (e.target.id === 'stRangeA') { syncRange('a'); return; }
+    if (e.target.id === 'stRangeB') { syncRange('b'); return; }
+    if (e.target.id === 'stFrom' || e.target.id === 'stTo') { syncRange('num'); return; }
     if (e.target.id === 'stFilter') { st.filter = e.target.value; st.shown = PAGE; render(); }
     else if (e.target.id === 'stCardFilter') { st.cardQuery = e.target.value; st.cardShown = 100; render(); }
   });
   root.addEventListener('change', e => {
     const t = e.target;
     if (t.id === 'stHide') { st.hide = t.checked; st.open.clear(); render(); }
+    else if (t.id === 'stFrom' || t.id === 'stTo') syncRange('num', true);
+    else if (t.id === 'stShuffle') { st.shuffle = t.checked; try { localStorage.setItem('mabble.practiseShuffle', t.checked ? 'on' : 'off'); } catch (e) {} }
     else if (t.dataset.sel) { t.checked ? st.sel.add(t.dataset.sel) : st.sel.delete(t.dataset.sel); render(); }
     else if (t.dataset.selall !== undefined) {
       const page = cardRows().slice(0, st.cardShown).map(([id]) => id);
@@ -554,6 +615,8 @@ export function createStudy(ctx) {
   });
   root.addEventListener('keydown', e => {
     if (e.target.id === 'stInput' && e.key === 'Enter') { e.preventDefault(); const v = e.target.value; e.target.value = ''; typed(v); }
+    // Enter in a range box starts practising
+    if ((e.target.id === 'stFrom' || e.target.id === 'stTo') && e.key === 'Enter') { e.preventDefault(); syncRange('num', true); const b = root.querySelector('[data-practise]'); if (b) b.click(); }
   });
   document.addEventListener('keydown', e => {
     if (!st.active || e.ctrlKey || e.metaKey || e.altKey) return;

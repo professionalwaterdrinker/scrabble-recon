@@ -54,32 +54,38 @@ export const LISTS = [
   {
     id: 'twos', title: 'Two-letter words', group: 'Must-know',
     blurb: 'Every two-letter word. The single most useful list in Scrabble.',
+    order: 'alphabetical order',
     build: ix => alphasOfLength(ix, 2).sort().map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'threes', title: 'Three-letter words', group: 'Must-know',
     blurb: 'All the threes, most likely to be drawn first.',
+    order: 'probability: #1 is the likeliest to be drawn',
     build: ix => alphasOfLength(ix, 3).sort(byProb).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'jqxz', title: 'Short J, Q, X and Z words', group: 'Must-know',
     blurb: 'Two- to four-letter words with the big-point tiles.',
+    order: 'length, then probability',
     build: ix => [...ix.byAlpha.keys()].filter(a => a.length <= 4 && /[JQXZ]/.test(a))
       .sort((a, b) => a.length - b.length || byProb(a, b)).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'top7', title: 'Top 7-letter bingos', group: 'Bingos',
     blurb: 'The 500 seven-letter racks you are most likely to draw that spell a word.',
+    order: 'probability: #1 is the likeliest to be drawn',
     build: ix => alphasOfLength(ix, 7).sort(byProb).slice(0, 500).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'top8', title: 'Top 8-letter bingos', group: 'Bingos',
     blurb: 'The 500 most likely eight-letter words, played through a tile on the board.',
+    order: 'probability: #1 is the likeliest to be drawn',
     build: ix => alphasOfLength(ix, 8).sort(byProb).slice(0, 500).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'stems', title: 'Best bingo stems', group: 'Bingos',
     blurb: 'Six-letter stems like SATIRE that make a seven with the most extra letters.',
+    order: 'how many letters make a seven: #1 takes the most',
     build: ix => {
       const stems = new Map();
       for (const a of alphasOfLength(ix, 7)) {
@@ -97,18 +103,21 @@ export const LISTS = [
   {
     id: 'vowels', title: 'Vowel-heavy words', group: 'Specialty',
     blurb: 'Words that use up a rack full of vowels, like AIOLI and AUREI.',
+    order: 'length, then probability',
     build: ix => [...ix.byAlpha.keys()].filter(a => a.length >= 4 && a.length <= 8 && [...a].filter(ch => VOWELS.has(ch)).length >= Math.ceil(a.length * 0.6))
       .sort((a, b) => a.length - b.length || byProb(a, b)).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'qnou', title: 'Q without U', group: 'Specialty',
     blurb: 'Words that play the Q when there is no U in sight.',
+    order: 'length, then probability',
     build: ix => [...ix.byAlpha.keys()].filter(a => a.includes('Q') && !a.includes('U') && a.length <= 8)
       .sort((a, b) => a.length - b.length || byProb(a, b)).map(a => ({ kind: 'anagram', prompt: a })),
   },
   {
     id: 'hooks2', title: 'Hooks on the twos', group: 'Hooks',
     blurb: 'The letters that go in front of or after each two-letter word.',
+    order: 'alphabetical order',
     build: ix => [...ix.set].filter(w => w.length === 2).sort().map(w => ({ kind: 'hook', prompt: w })),
   },
 ];

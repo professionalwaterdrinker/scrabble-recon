@@ -654,6 +654,28 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 .st-hw.got, .st-hw.miss { font-weight: 700; }
 @media (max-width: 480px) { .st-skip .hint { display: none; } .st-sbar { gap: 8px; } }
 
+/* Study: practise a range of cards */
+.st-practise { display: grid; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.st-pr-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.st-pr-head b { font-size: 15.5px; }
+.st-pr-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.st-pr-row.end { justify-content: space-between; }
+.st-pr-num { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.st-pr-num input { width: 76px; font: 600 15px var(--f-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); text-align: center; }
+.st-pr-count { margin-left: auto; font: 600 13px var(--f-mono); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 4px 10px; border-radius: 999px; }
+/* two range inputs on one track; only their thumbs take pointer events */
+.st-range { --a: 0%; --b: 100%; position: relative; height: 28px; margin: 0 10px; }
+.st-range-track { position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; background: color-mix(in srgb, var(--line) 80%, transparent); }
+.st-range-fill { position: absolute; top: 0; bottom: 0; left: var(--a); right: calc(100% - var(--b)); border-radius: 3px; background: var(--accent); }
+.st-range input[type="range"] { position: absolute; left: -10px; right: -10px; width: calc(100% + 20px); top: 0; height: 28px; margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.st-range input[type="range"]::-webkit-slider-runnable-track { background: none; border: 0; }
+.st-range input[type="range"]::-moz-range-track { background: none; border: 0; }
+.st-range input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); cursor: grab; }
+.st-range input[type="range"]::-moz-range-thumb { pointer-events: auto; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); cursor: grab; }
+.st-range input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.st-range input[type="range"]:focus-visible::-moz-range-thumb { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+@media (max-width: 480px) { .st-pr-count { margin-left: 0; } .st-pr-num input { width: 68px; } }
+
 /* poster-only decorations stay hidden in the classic skin */
 .rays, .zigzag { display: none; }
 :root[data-skin="brute"] .rays, :root[data-skin="brute"] .zigzag { display: block; }
@@ -1153,6 +1175,21 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 :root[data-skin="felt"] .st-skip .hint { color: rgba(255, 255, 255, .85); font-size: 15px; }
 :root[data-skin="felt"] .st-face.back .st-words li.got .w, :root[data-skin="felt"] .st-face.back .st-hw.got, :root[data-skin="felt"] .st-face.back .st-stem-row.got b { color: #2a7d5c; }
 :root[data-skin="felt"] .st-face.back .st-words li.miss .w, :root[data-skin="felt"] .st-face.back .st-hw.miss, :root[data-skin="felt"] .st-face.back .st-stem-row.miss b { color: #c0392b; }
+
+:root[data-skin="brute"] .st-practise { border: 2px solid var(--line); border-radius: 0; box-shadow: 4px 4px 0 var(--shadow); }
+:root[data-skin="brute"] .st-pr-num input, :root[data-skin="brute"] .st-pr-count, :root[data-skin="brute"] .st-range-track, :root[data-skin="brute"] .st-range-fill { border-radius: 0; }
+:root[data-skin="brute"] .st-pr-count { background: var(--yellow); color: #0a0a0a; }
+:root[data-skin="brute"] .st-range input[type="range"]::-webkit-slider-thumb { border-radius: 0; border-color: var(--line); background: var(--accent); }
+:root[data-skin="brute"] .st-range input[type="range"]::-moz-range-thumb { border-radius: 0; border-color: var(--line); background: var(--accent); }
+:root[data-skin="felt"] .st-practise { background: var(--surface); border: 3px solid var(--line); border-radius: 14px; box-shadow: 0 5px 0 var(--line); }
+:root[data-skin="felt"] .st-pr-head b { font-size: 21px; font-weight: 400; }
+:root[data-skin="felt"] .st-pr-num { font-size: 17px; font-weight: 400; }
+:root[data-skin="felt"] .st-pr-num input { font: 400 20px var(--f-mono); }
+:root[data-skin="felt"] .st-pr-count { background: var(--hot); color: #3b2a00; border-radius: 6px; font: 400 17px var(--f-mono); }
+:root[data-skin="felt"] .st-range-track { background: var(--panel-2); height: 8px; margin-top: -4px; border-radius: 4px; box-shadow: inset 0 2px 0 rgba(0, 0, 0, .3); }
+:root[data-skin="felt"] .st-range-fill { background: var(--hot); border-radius: 4px; }
+:root[data-skin="felt"] .st-range input[type="range"]::-webkit-slider-thumb { border-radius: 4px; background: var(--tile); border: 2px solid #fff; box-shadow: 0 3px 0 var(--tile-edge); }
+:root[data-skin="felt"] .st-range input[type="range"]::-moz-range-thumb { border-radius: 4px; background: var(--tile); border: 2px solid #fff; box-shadow: 0 3px 0 var(--tile-edge); }
 
 /* =====================================================================
    EFFECTS (data-fx on the root): "saver" and "high". Standard has no attribute.
