@@ -918,26 +918,28 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 /* Jersey 10 has one weight; sizes are nudged up so the pixel letters stay readable */
 :root[data-skin="felt"] .hint, :root[data-skin="felt"] .note { font-size: 15.5px; }
 
-/* the table: colour fields turning slowly (transform only, cheap to animate) and faint scanlines */
+/* the table: still colour fields and faint scanlines, drawn once. (A slowly turning layer
+   looked nice but made the whole screen redraw 60 times a second, which lagged on laptops.) */
 :root[data-skin="felt"] .felt-bg { display: block; position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-:root[data-skin="felt"] .felt-swirl { position: absolute; inset: -60%; will-change: transform; animation: felt-turn 90s linear infinite;
+:root[data-skin="felt"] .felt-swirl { position: absolute; inset: 0;
   background:
-    radial-gradient(closest-side at 30% 35%, rgba(70, 150, 125, .55), transparent 70%),
-    radial-gradient(closest-side at 70% 30%, rgba(150, 50, 65, .40), transparent 70%),
-    radial-gradient(closest-side at 55% 72%, rgba(40, 75, 140, .45), transparent 70%),
-    radial-gradient(closest-side at 22% 78%, rgba(60, 120, 100, .40), transparent 70%),
+    radial-gradient(55% 60% at 18% 22%, rgba(70, 150, 125, .50), transparent 70%),
+    radial-gradient(45% 50% at 88% 14%, rgba(150, 50, 65, .38), transparent 70%),
+    radial-gradient(55% 55% at 70% 88%, rgba(40, 75, 140, .42), transparent 70%),
+    radial-gradient(45% 50% at 8% 92%, rgba(60, 120, 100, .38), transparent 70%),
     #163330; }
 :root[data-skin="felt"] .felt-crt { position: absolute; inset: 0;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .14) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%); }
-@keyframes felt-turn { to { transform: rotate(360deg); } }
-@keyframes felt-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-3px) rotate(1deg); } }
-@keyframes felt-float { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-4px) rotate(1.5deg); } }
+/* idle motion in held frames, like an old game sprite: the screen only changes a few times a
+   second, where smooth easing would redraw it 60 times a second for as long as the page is open */
+@keyframes felt-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 25%, 75% { transform: translateY(-2px) rotate(0deg); } 50% { transform: translateY(-3px) rotate(1deg); } }
+@keyframes felt-float { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 25%, 75% { transform: translateY(-2px) rotate(0deg); } 50% { transform: translateY(-4px) rotate(1.5deg); } }
 @keyframes felt-pop { from { transform: scale(.4); } to { transform: none; } }
 
 /* header */
 :root[data-skin="felt"] h1, :root[data-skin="felt"] .brand h1 { font: 700 clamp(34px, 6vw, 48px)/1 var(--f-display); letter-spacing: .05em; text-transform: uppercase; color: #fff;
-  text-shadow: 0 4px 0 var(--red-d), 0 8px 0 rgba(0, 0, 0, .35); animation: felt-bob 3.2s ease-in-out infinite; }
-:root[data-skin="felt"] .mark span { border-radius: 6px; border: 2px solid #fff; box-shadow: 0 3px 0 var(--tile-edge), 0 5px 0 rgba(0, 0, 0, .25); animation: felt-float 2.8s ease-in-out infinite; }
+  text-shadow: 0 4px 0 var(--red-d), 0 8px 0 rgba(0, 0, 0, .35); animation: felt-bob 3.2s steps(1, end) infinite; }
+:root[data-skin="felt"] .mark span { border-radius: 6px; border: 2px solid #fff; box-shadow: 0 3px 0 var(--tile-edge), 0 5px 0 rgba(0, 0, 0, .25); animation: felt-float 2.8s steps(1, end) infinite; }
 :root[data-skin="felt"] .mark span:nth-child(2) { animation-delay: -.9s; } :root[data-skin="felt"] .mark span:nth-child(3) { animation-delay: -1.8s; }
 
 /* chunky controls */
@@ -996,7 +998,7 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 
 /* rack tiles float like cards in hand */
 :root[data-skin="felt"] .rtile { border-radius: 7px; border: 2px solid #fff; box-shadow: 0 4px 0 var(--tile-edge), 0 7px 0 rgba(0, 0, 0, .25); font-family: var(--f-display); }
-:root[data-skin="felt"] .px-rack .rtile:not(.picked):not(.back):not(.gone) { animation: felt-float 2.8s ease-in-out infinite; }
+:root[data-skin="felt"] .px-rack .rtile:not(.picked):not(.back):not(.gone) { animation: felt-float 2.8s steps(1, end) infinite; }
 :root[data-skin="felt"] .px-rack .rtile:nth-child(2n) { animation-delay: -.7s; }
 :root[data-skin="felt"] .px-rack .rtile:nth-child(3n) { animation-delay: -1.4s; }
 :root[data-skin="felt"] .px-rack .rtile.picked { transform: translateY(-12px) rotate(-3deg); box-shadow: 0 4px 0 var(--tile-edge), 0 16px 0 rgba(0, 0, 0, .2); }
@@ -1035,7 +1037,7 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 :root[data-skin="felt"] .st-hero h2, :root[data-skin="felt"] .st-head h2, :root[data-skin="felt"] .st-empty h2, :root[data-skin="felt"] .st-done h2 { text-shadow: 0 4px 0 rgba(0, 0, 0, .35); letter-spacing: .03em; }
 :root[data-skin="felt"] .st-group h3 { color: var(--hot); }
 :root[data-skin="felt"] .st-tile { border-radius: 6px; border: 2px solid #fff; box-shadow: 0 3px 0 var(--tile-edge), 0 5px 0 rgba(0, 0, 0, .25); font-family: var(--f-display); }
-:root[data-skin="felt"] .st-tiles.big .st-tile { animation: felt-float 2.8s ease-in-out infinite; }
+:root[data-skin="felt"] .st-tiles.big .st-tile { animation: felt-float 2.8s steps(1, end) infinite; }
 :root[data-skin="felt"] .st-tiles.big .st-tile:nth-child(2n) { animation-delay: -.7s; } :root[data-skin="felt"] .st-tiles.big .st-tile:nth-child(3n) { animation-delay: -1.4s; }
 :root[data-skin="felt"] .st-cue { background: var(--hot); color: #3b2a00; border-radius: 6px; }
 :root[data-skin="felt"] .st-bar { background: var(--panel-2); box-shadow: inset 0 2px 0 rgba(0, 0, 0, .3); }
