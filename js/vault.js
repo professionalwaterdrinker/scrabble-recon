@@ -32,6 +32,7 @@ export async function openVault(lexKey) {
   let v = null;
   try { v = await get(key); } catch (e) {}
   v = v || { cards: {}, lists: [], days: [], newToday: { day: '', n: 0 } };
+  v.history = v.history || [];
   let saving = null;
   const save = () => { saving = (saving || Promise.resolve()).then(() => put(key, v)).catch(() => {}); return saving; };
   const vault = {
@@ -63,7 +64,7 @@ export async function openVault(lexKey) {
     grade(id, g, now = Date.now()) {
       const c = v.cards[id]; if (!c) return null;
       if (!c.seen) { v.newToday.n++; }
-      c.seen++;
+      c.seen++; c.last = now;
       if (g === 0) { c.wrong++; c.box = 0; c.due = now + 5 * MIN; }
       else {
         c.right++;
@@ -87,6 +88,33 @@ export async function openVault(lexKey) {
       const set = new Set(v.days);
       for (let t = now; ; t -= DAY) { if (set.has(dayKey(t))) streak++; else if (t === now) continue; else break; if (streak > 400) break; }
       return { total: cards.length, due, learned, fresh, streak, newLeft: v.newToday.day === dayKey(now) ? Math.max(0, NEW_PER_DAY - v.newToday.n) : NEW_PER_DAY };
+    },
+    // one entry per finished or stopped session, newest last
+    recordSession(entry) {
+      v.history.push(entry);
+      if (v.history.length > 300) v.history.splice(0, v.history.length - 300);
+      save();
+    },
+    history: () => v.history,
+    deleteSessions(ats) {
+      const gone = new Set(ats);
+      v.history = v.history.filter(h => !gone.has(h.at));
+      save();
+    },
+    // take cards out of the reviews altogether (their progress goes with them)
+    deleteCards(ids) {
+      let n = 0;
+      for (const id of ids) if (v.cards[id]) { delete v.cards[id]; n++; }
+      // a list whose cards are all gone is no longer "in your reviews"
+      v.lists = v.lists.filter(l => Object.values(v.cards).some(c => c.list === l));
+      save(); return n;
+    },
+    cards: () => Object.entries(v.cards),
+    // put deleted cards back (undo)
+    restoreCards(entries, lists) {
+      for (const [id, c] of entries) v.cards[id] = c;
+      for (const l of lists) if (!v.lists.includes(l)) v.lists.push(l);
+      save();
     },
     listProgress(ids) {
       let inVault = 0, learned = 0;

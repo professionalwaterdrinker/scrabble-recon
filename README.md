@@ -166,7 +166,9 @@ Each card shows the letters as tiles with a cue such as "3 words". Faint letters
 
 **Review.** Add a list and its cards join your reviews, 15 new ones a day. Answer by flipping the card or by typing every word the letters make. Grade **Again**, **Good** or **Easy**. Each Good moves a card up a box, and the wait before it comes back grows: 1, 3, 7, 14, 30, 60, then 120 days. Again brings it back in the same session. The schedule, streak and progress are kept in this browser's IndexedDB, separately for each word list.
 
-**Keys:** <kbd>Space</kbd> shows the answer, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> grade it, <kbd>Enter</kbd> checks a typed word (an empty Enter shows the answer), <kbd>Esc</kbd> ends the session, <kbd>/</kbd> searches a list and <kbd>?</kbd> lists them all.
+**History.** Lists every session you finished or stopped early, with a two-week activity chart. Open a session to see which cards you missed at first. **Cards in your reviews** lists every card with its stage, when it's next due and its right and wrong counts. You can filter it (in progress, not started, learned or all) or search it. Tick cards, or **Select all**, and **Delete** to take them out of your reviews. **Undo** brings them back for a few seconds afterwards.
+
+**Keys:** <kbd>Space</kbd> shows the answer, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> grade it, <kbd>Enter</kbd> checks a typed word (an empty Enter shows the answer), <kbd>Esc</kbd> ends the session, <kbd>/</kbd> searches a list, <kbd>Delete</kbd> deletes the ticked cards in History and <kbd>?</kbd> lists them all.
 
 ## Licence
 
