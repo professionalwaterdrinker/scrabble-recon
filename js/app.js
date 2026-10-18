@@ -1025,7 +1025,6 @@ startWorker();
 bootLexicon();
 // settings from features that are gone; the API key especially shouldn't linger
 try { localStorage.removeItem('tilerewind.method'); localStorage.removeItem('tilerewind.apiKey'); } catch (e) {}
-renderMethod();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
