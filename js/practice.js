@@ -500,6 +500,7 @@ export function createPractice(ctx) {
     }, 250);
   }
   const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const num = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1);   // a proper minus sign, like the leave's
   function renderEquity(ev) {
     const box = $('pxBreak');
     let html;
@@ -514,13 +515,13 @@ export function createPractice(ctx) {
       // it's labelled with the board term too when Quackle's board adjustment isn't zero
       const leave = done ? a.equity - a.score : null, keep = done ? (a.leave || '') : null, boardToo = done && Math.abs(a.board || 0) >= 0.05;
       const rank = done ? (c.rank === 0 ? 'Quackle’s top play' : c.rank > 0 ? `Quackle ranks this <b>#${c.rank + 1}</b> of its top 40` : 'Outside Quackle’s top 40') : '';
-      const best = done && c.rank !== 0 && c.best ? ` (the best is worth ${c.best.equity.toFixed(1)})` : '';
+      const best = done && c.rank !== 0 && c.best ? ` (the best is worth ${num(c.best.equity)})` : '';
       html = `
         <div class="pb-chip score"><small>Score</small><b>${ev.score}</b></div>
         <div class="pb-op">+</div>
         <div class="pb-chip leave ${done ? (leave >= 0 ? 'good' : 'bad') : ''}"><small>${boardToo ? 'Leave &amp; board' : 'Leave'}</small><b>${done ? signed(leave) : '…'}</b></div>
         <div class="pb-op">=</div>
-        <div class="pb-chip equity"><small>Equity</small><b>${done ? a.equity.toFixed(1) : '…'}</b></div>
+        <div class="pb-chip equity"><small>Equity</small><b>${done ? num(a.equity) : '…'}</b></div>
         <p class="pq-note">${done ? `${keep ? `Keeps <span class="pq-keep">${[...keep].map(ch => `<span class="mini">${ch}</span>`).join('')}</span>` : 'Uses every tile'} · ${rank}${best}.`
           : c && c.status === 'error' ? `Quackle couldn't rate this play.`
           : engine.state() === 'ready' ? '<span class="spinner"></span>Quackle is rating this play…' : '<span class="spinner"></span>Loading Quackle (about 26 MB the first time)…'}</p>`;
