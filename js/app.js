@@ -1,4 +1,3 @@
-import { getKey, setKey, explainMove } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
 import { createPractice } from './practice.js';
@@ -347,15 +346,6 @@ $('readBtn').onclick = async () => {
   }
 };
 
-/* ---------- API key ---------- */
-const keyDialog = $('keyDialog');
-function openKeyDialog() { $('keyInput').value = ''; $('keyRemove').hidden = !getKey(); keyDialog.showModal(); $('keyInput').focus(); }
-$('keyForm').addEventListener('submit', e => {
-  const action = e.submitter ? e.submitter.value : 'save';
-  if (action === 'save' && $('keyInput').value.trim()) setKey($('keyInput').value.trim());
-  else if (action === 'remove') setKey('');
-  $('keyInput').value = '';
-});
 $('stopBtn').onclick = () => visionCtl && visionCtl.abort();
 const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -997,8 +987,6 @@ const practice = createPractice({
     // the opponent's best replies after a move, over randomly sampled racks
     replies: async (input, samples) => { await qkReady(); await qkSyncLexicon(); return qkSend({ type: 'replies', input, samples }); },
   },
-  // optional write-up by Claude (needs the API key set under Read the photo)
-  writer: { hasKey: () => !!getKey(), write: (facts, signal) => explainMove(facts, getKey(), signal), openKeyDialog: () => openKeyDialog() },
 });
 $('editBtn').onclick = () => setMode('setup');
 
@@ -1011,7 +999,8 @@ S.autoSolve = S.isSample;
 renderChecks(); renderBoard();
 startWorker();
 bootLexicon();
-try { localStorage.removeItem('tilerewind.method'); } catch (e) {}
+// settings from features that are gone; the API key especially shouldn't linger
+try { localStorage.removeItem('tilerewind.method'); localStorage.removeItem('tilerewind.apiKey'); } catch (e) {}
 renderMethod();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

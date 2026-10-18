@@ -1,6 +1,5 @@
 // Why one play beats another: facts measured from Quackle's numbers, the board and
-// sampled opponent replies, turned into a checklist. An optional write-up (by
-// Claude) only ever rephrases these facts.
+// sampled opponent replies, turned into a checklist.
 
 const N = 15;
 const VOWELS = new Set(['A', 'E', 'I', 'O', 'U']);
@@ -170,14 +169,3 @@ export function checklist(top, mine) {
   return { why, weak };
 }
 
-// What goes to the AI write-up: only measured facts, no board to reinterpret.
-export function factsForWriter(top, mine) {
-  const strip = f => ({
-    play: f.play.replace(/<[^>]+>/g, ''), kind: f.kind, score: f.score, equity: f.equity, leave: f.leave.tiles,
-    leaveValue: f.leaveValue, boardValue: f.boardValue, openingPlacementValue: f.placementValue,
-    leaveNotes: { vowels: f.leave.vowels, consonants: f.leave.consonants, blanks: f.leave.blanks, esses: f.leave.esses, duplicates: f.leave.duplicates, qWithoutU: f.leave.qWithoutU, balance: f.leave.balance },
-    board: f.board && { premiumSquaresOpened: f.board.opened, premiumSquaresClosed: f.board.closed, bingoLinesBefore: f.board.bingoLinesBefore, bingoLinesAfter: f.board.bingoLinesAfter, usedBlank: f.board.usedBlank },
-    opponentNextTurn: f.replies && { racksSampled: f.replies.samples, averageBestReply: +f.replies.average.toFixed(1), shareScoring30Plus: pct(f.replies.over30), shareScoring40Plus: pct(f.replies.over40), shareBingo: pct(f.replies.bingo), strongestReplies: f.replies.worst.map(w => ({ play: w.label.replace(/<[^>]+>/g, ''), score: w.score, exampleRack: w.rack, share: pct(w.share) })) },
-  });
-  return { quackleChoice: strip(top), yourPlay: strip(mine), equityGap: +(top.equity - mine.equity).toFixed(1) };
-}

@@ -53,7 +53,7 @@ All paths are relative, so the site works from a project subfolder like that.
 
 ### Installing it as an app
 
-Mabble is a progressive web app: on a phone, open the site and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome). The app shell and word list are cached, so the editor, the solver and the on-device photo reader all work offline. Only the optional Claude write-up in Practice needs a connection, besides the first download of the Quackle engine. The service worker only runs over HTTPS, so it is skipped on `localhost`.
+Mabble is a progressive web app: on a phone, open the site and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome). The app shell and word list are cached, so the editor, the solver and the on-device photo reader all work offline. Only the first download of the Quackle engine needs a connection. The service worker only runs over HTTPS, so it is skipped on `localhost`.
 
 When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so installed copies pick up the update.
 
@@ -67,7 +67,6 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `js/solver.js` | Web worker that reconstructs the move order |
 | `js/racks.js` | Works out each player's rack and the bag at every turn |
 | `js/localreader.js` | Free on-device photo reader: corner picker, perspective correction, tile detection, letter matching |
-| `js/vision.js` | Optional Claude write-up of a Practice move |
 | `data/words.txt` | ENABLE word list (public domain) plus a few common two-letter additions (QI, ZA, KI, OK, …) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and install metadata |
 | `tools/gen_sample.py` | Script that simulated the built-in sample game |
@@ -114,7 +113,7 @@ When your move wasn't Quackle's top choice, **Explain the difference** in the re
 - **The board:** premium squares each play opens or closes, and lines left open for a bingo.
 - **The opponent's next turn:** Quackle deals the opponent 150 random racks from the tiles you can't see (in about half a second), after each play. It then compares their average best reply, and how often they score 30-plus or bingo.
 
-Weak points are only listed when Quackle's play doesn't share them. When Quackle's play is the riskier one, the checklist says so. **Worst cases** shows the strongest replies your play allows; tap one to see it on the board in red. With a Claude API key set, **Write it up with Claude** turns the same measured facts into a short coach's note. It's told to use only those facts, and never to describe the board itself.
+Weak points are only listed when Quackle's play doesn't share them. When Quackle's play is the riskier one, the checklist says so. **Worst cases** shows the strongest replies your play allows; tap one to see it on the board in red.
 
 ### Memory
 

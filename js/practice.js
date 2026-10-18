@@ -297,19 +297,6 @@ export function createPractice(ctx) {
     }
     if (viewing === k) render();
   }
-  async function writeUp(k) {
-    const w = whys[k];
-    if (!w || w.status !== 'done' || !ctx.writer) return;
-    w.writer = { status: 'running' };
-    render();
-    try {
-      const res = await ctx.writer.write(ctx.explain.factsForWriter(w.top, w.mine));
-      w.writer = { status: 'done', ...res };
-    } catch (err) {
-      w.writer = { status: 'error', error: String(err && err.message || err) };
-    }
-    if (viewing === k) render();
-  }
   function whyHtml(k, e) {
     const a = e.analysis;
     if (!a || a.loss === null || a.loss < 0.05 || !a.actual || !a.moves[0]) return '';
@@ -331,21 +318,11 @@ export function createPractice(ctx) {
         const on = preview && preview.key === `${k}:w${n}`;
         return `<button type="button" class="worst-case ${on ? 'on' : ''}" data-worst="${n}"><span class="ws-score">${x.score}</span><span class="ws-play">${x.label}</span><span class="ws-rack">with ${escapeHtml(x.rack)} · ${Math.round(x.share * r2.samples)} of ${r2.samples} sampled racks</span></button>`;
       }).join('')}</div>` : '';
-    let writer = '';
-    if (ctx.writer) {
-      const wr = w.writer;
-      if (wr && wr.status === 'done') writer = `<div class="coach"><b>Coach's take</b><ul>${li(wr.why.map(escapeHtml))}</ul><ul class="weak">${li(wr.weak.map(escapeHtml))}</ul><p class="note">Written by Claude from the facts above.</p></div>`;
-      else if (wr && wr.status === 'running') writer = '<p class="status"><span class="spinner"></span>Claude is writing it up…</p>';
-      else if (wr && wr.status === 'error') writer = `<p class="status err">${escapeHtml(wr.error)}</p><div class="row"><button class="btn" data-why="write" type="button">Try again</button></div>`;
-      else writer = ctx.writer.hasKey()
-        ? '<div class="row"><button class="btn" data-why="write" type="button">Write it up with Claude</button></div>'
-        : '<p class="hint">For a written explanation, <button class="linkish" data-why="key" type="button">add a Claude API key</button>.</p>';
-    }
     return `<div class="why">${head}
       <ul class="why-list">${li(w.list.why)}</ul>
       <h4 class="why-sub">Weak points of your play</h4>
       <ul class="why-list weak">${li(w.list.weak)}</ul>
-      ${compare}${worst}${writer}</div>`;
+      ${compare}${worst}</div>`;
   }
   function clickWorst(k, n) {
     const w = whys[k];
@@ -554,8 +531,6 @@ export function createPractice(ctx) {
     if (whyBtn && viewing !== null) {
       const act = whyBtn.dataset.why;
       if (act === 'run') explain(viewing);
-      else if (act === 'write') writeUp(viewing);
-      else if (act === 'key' && ctx.writer) ctx.writer.openKeyDialog();
       return;
     }
     const worstBtn = e.target.closest('[data-worst]');

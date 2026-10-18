@@ -237,21 +237,6 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
   </form>
 </dialog>
 
-<dialog id="keyDialog" aria-labelledby="keyTitle">
-  <form method="dialog" id="keyForm" class="dialog-body">
-    <h2 id="keyTitle">Claude API key</h2>
-    <p class="hint">Practice can ask Claude to write up why one play beats another. Mabble sends the move facts straight from this browser to the Claude API using your key. The key is stored only in this browser, and you pay for what you use (a write-up is usually a cent or two).</p>
-    <p class="hint">Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. A key with a spending limit is a good idea.</p>
-    <label class="field" for="keyInput">API key
-      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
-    </label>
-    <div class="row">
-      <button class="btn primary" id="keySave" value="save">Save key</button>
-      <button class="btn" id="keyRemove" value="remove" type="submit">Remove key</button>
-      <button class="btn" value="cancel" type="submit" formnovalidate>Cancel</button>
-    </div>
-  </form>
-</dialog>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

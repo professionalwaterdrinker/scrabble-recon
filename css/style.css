@@ -378,10 +378,6 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .ws-score { grid-row: span 2; font: 800 20px var(--f-display); color: var(--bad); align-self: center; }
 .ws-play { font-size: 14px; }
 .ws-rack { font: 12px var(--f-mono); color: var(--muted); }
-.coach { display: grid; gap: 6px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); font-size: 14px; }
-.coach ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
-.coach ul.weak li::marker { color: var(--bad); }
-.linkish { border: 0; padding: 0; background: none; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
 .tile.threat { box-shadow: inset 0 -0.45cqi 0 var(--tile-edge), 0 0 0 0.45cqi var(--bad); outline: 0.3cqi dashed var(--bad); outline-offset: 0.2cqi; z-index: 1; }
 @media (max-width: 480px) { .why-compare .hint { min-width: 0; display: block; } }
 
@@ -497,7 +493,6 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 :root[data-skin="brute"] input[type="text"], :root[data-skin="brute"] input[type="password"], :root[data-skin="brute"] select, :root[data-skin="brute"] textarea, :root[data-skin="brute"] .field input { border: 2px solid var(--line); border-radius: 0; background: var(--surface); }
 :root[data-skin="brute"] input[type="range"] { accent-color: var(--accent); }
 :root[data-skin="brute"] .kbd { border: 1.5px solid var(--line); border-bottom-width: 3px; border-radius: 0; background: var(--surface); }
-:root[data-skin="brute"] .linkish { color: var(--accent); font-weight: 600; }
 
 :root[data-skin="brute"] .drop { border: 3px dashed var(--line); border-radius: 0; background: radial-gradient(circle, var(--hair) 0 1px, transparent 1.4px) 0 0 / 8px 8px, var(--surface); }
 :root[data-skin="brute"] .drop.over { border-color: var(--accent); }
@@ -598,7 +593,6 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 :root[data-skin="brute"] .worst-case { border: 2px solid var(--line); border-radius: 0; background: var(--surface); }
 :root[data-skin="brute"] .worst-case:hover, :root[data-skin="brute"] .worst-case.on { border-color: var(--accent); box-shadow: 4px 4px 0 var(--accent); }
 :root[data-skin="brute"] .ws-score { font: 400 26px var(--f-display); color: var(--accent); }
-:root[data-skin="brute"] .coach { border: 2px solid var(--line); border-radius: 0; background: var(--warn-bg); color: var(--ink); }
 :root[data-skin="brute"] .sim-progress .bar { height: 12px; border: 2px solid var(--line); border-radius: 0; background: var(--surface); }
 :root[data-skin="brute"] .sim-progress .bar span { background: repeating-linear-gradient(-45deg, var(--accent) 0 8px, #0a0a0a 8px 16px); }
 
