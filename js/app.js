@@ -1,4 +1,4 @@
-import { readBoard, getKey, setKey, explainMove } from './vision.js';
+import { getKey, setKey, explainMove } from './vision.js';
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
 import { createPractice } from './practice.js';
@@ -308,23 +308,12 @@ async function setFile(f) {
     S.image = await loadWorkingImage(f);
     if (picker) picker.destroy();
     picker = new CornerPicker($('picker'), S.image);
-    renderMethod();
+    $('pickerBox').hidden = false; picker.draw();
   } catch (e) {
     S.file = null; visionStatus('That image could not be opened. Try a JPEG or PNG.', 'err');
   }
   updateReadBtn();
 }
-function method() { const el = document.querySelector('input[name="method"]:checked'); return el ? el.value : 'local'; }
-function renderMethod() {
-  const m = method();
-  $('keyRow').hidden = m !== 'claude';
-  $('pickerBox').hidden = m !== 'local' || !S.image;
-  if (!$('pickerBox').hidden && picker) picker.draw();
-}
-document.querySelectorAll('input[name="method"]').forEach(r => r.addEventListener('change', () => {
-  try { localStorage.setItem('tilerewind.method', method()); } catch (e) {}
-  renderMethod();
-}));
 $('rotateBtn').onclick = () => picker && picker.rotate();
 function updateReadBtn() { $('readBtn').disabled = !S.file || !!visionCtl; }
 $('file').onchange = e => setFile(e.target.files[0]);
@@ -335,22 +324,15 @@ drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('
 document.addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type)); if (f) setFile(f); });
 
 $('readBtn').onclick = async () => {
-  const local = method() === 'local';
-  const key = getKey();
-  if (!local && !key) { openKeyDialog(); return; }
   visionCtl = new AbortController();
   updateReadBtn(); $('stopBtn').hidden = false;
-  visionStatus(local
-    ? '<span class="spinner"></span>Reading the board on this device…'
-    : '<span class="spinner"></span>Reading the board. Careful reading of all 225 squares usually takes 30 to 90 seconds.');
+  visionStatus('<span class="spinner"></span>Reading the board on this device…');
   try {
-    const res = local
-      ? await readBoardLocally(S.image, picker.pts, {
-          signal: visionCtl.signal,
-          isWord: w => !DICT || DICT.has(w),
-          onProgress: t => visionStatus('<span class="spinner"></span>' + escapeHtml(t)),
-        })
-      : await readBoard(S.file, key, visionCtl.signal);
+    const res = await readBoardLocally(S.image, picker.pts, {
+      signal: visionCtl.signal,
+      isWord: w => !DICT || DICT.has(w),
+      onProgress: t => visionStatus('<span class="spinner"></span>' + escapeHtml(t)),
+    });
     setFromRows(res.rows);
     res.unsure.forEach(p => S.unsure.add(p[0] * N + p[1]));
     S.isSample = false; S.moves = null; $('tab-replay').disabled = true; saveDraft();
@@ -360,7 +342,6 @@ $('readBtn').onclick = async () => {
   } catch (e) {
     if (e && e.code === 'cancelled') visionStatus('Stopped.');
     else visionStatus(escapeHtml((e && e.code && e.message) || 'Something went wrong reading the photo. Try again.'), 'err');
-    if (e && e.code === 'auth') renderKeyState();
   } finally {
     visionCtl = null; $('stopBtn').hidden = true; updateReadBtn();
   }
@@ -368,19 +349,12 @@ $('readBtn').onclick = async () => {
 
 /* ---------- API key ---------- */
 const keyDialog = $('keyDialog');
-function renderKeyState() {
-  const k = getKey();
-  $('keyState').textContent = k ? `Using your Claude API key ending in ${k.slice(-4)}.` : 'The Claude option uses your own API key. You pay Anthropic for what you use.';
-  $('keyBtn').textContent = k ? 'Change key' : 'Set API key';
-}
 function openKeyDialog() { $('keyInput').value = ''; $('keyRemove').hidden = !getKey(); keyDialog.showModal(); $('keyInput').focus(); }
-$('keyBtn').onclick = openKeyDialog;
 $('keyForm').addEventListener('submit', e => {
   const action = e.submitter ? e.submitter.value : 'save';
   if (action === 'save' && $('keyInput').value.trim()) setKey($('keyInput').value.trim());
   else if (action === 'remove') setKey('');
   $('keyInput').value = '';
-  renderKeyState();
 });
 $('stopBtn').onclick = () => visionCtl && visionCtl.abort();
 const escapeHtml = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1037,8 +1011,7 @@ S.autoSolve = S.isSample;
 renderChecks(); renderBoard();
 startWorker();
 bootLexicon();
-renderKeyState();
-try { const m = localStorage.getItem('tilerewind.method'); const el = m && document.querySelector(`input[name="method"][value="${m}"]`); if (el) el.checked = true; } catch (e) {}
+try { localStorage.removeItem('tilerewind.method'); } catch (e) {}
 renderMethod();
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
