@@ -5,20 +5,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mabble</title>
 <meta name="description" content="Photograph a finished Scrabble board and rebuild the game move by move, with scores.">
-<meta name="theme-color" content="#1d4740">
+<meta name="theme-color" content="#0a0a0a">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="wrap">
+  <!-- ink filters: rough brush edges and torn-paper outlines -->
+  <svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="ink"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="rough"><feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>
+  </svg>
   <header class="top">
-    <div>
+    <div class="masthead">
+      <div class="rays" aria-hidden="true"></div>
       <div class="brand">
         <div class="mark" aria-hidden="true"><span>M</span><span>A</span><span>B</span></div>
         <h1>Mabble</h1>
@@ -34,6 +40,7 @@
     </div>
     </div>
   </header>
+  <div class="zigzag" aria-hidden="true"></div>
 
   <main class="layout">
     <section class="board-col" aria-label="Board">
