@@ -25,18 +25,22 @@ export function createPractice(ctx) {
   /* ---------- computer opponents ---------- */
 
   // Three levels, in the spirit of Woogles' bots. Each asks Quackle for its best 40 plays
-  // for the bot's own rack (it never sees yours) and picks one its own way.
+  // for the bot's own rack (it never sees yours) and picks one its own way. Saved games
+  // store the level ('basic', 'better', 'stee'), so names can change without breaking them.
   const BOTS = {
-    basic: { name: 'BasicBot', pick: pickBasic },
-    better: { name: 'BetterBot', pick: pickBetter },
-    stee: { name: 'SteeBot', pick: pickStee },
+    basic: { name: 'MoBot', level: 'easy', pick: pickBasic },
+    better: { name: 'ThantBot', level: 'medium', pick: pickBetter },
+    stee: { name: 'CinBot', level: 'hard', pick: pickStee },
   };
   const BOT = 1;                       // in a game against the computer you are player 0
   const isBotTurn = () => !!(G && G.opp && !G.over && G.turn === BOT);
   const name = p => G && G.opp ? (p === BOT ? BOTS[G.opp].name : 'You') : `Player ${p + 1}`;
+  // the bot's name in an outline coloured by difficulty (green easy, amber medium, red hard)
+  const botTag = id => `<span class="bot-tag lvl-${BOTS[id].level}" title="${BOTS[id].level[0].toUpperCase() + BOTS[id].level.slice(1)} computer opponent">${BOTS[id].name}</span>`;
+  const nameHtml = p => G && G.opp && p === BOT ? botTag(G.opp) : escapeHtml(name(p));
   const places = moves => moves.filter(m => m.action === 'place');
   const fallback = (moves, bag) => moves.find(m => m.action === 'exchange' && bag >= RACK) || { action: 'pass' };
-  // BasicBot: a random play from the lower-scoring two thirds; usually passes up bingos; no board sense
+  // MoBot (easy): a random play from the lower-scoring two thirds; usually passes up bingos; no board sense
   function pickBasic(moves, bag) {
     const p = places(moves);
     if (!p.length) return fallback(moves, bag);
@@ -45,7 +49,7 @@ export function createPractice(ctx) {
     const low = byScore.slice(0, Math.max(1, Math.ceil(byScore.length * 2 / 3)));
     return low[Math.floor(Math.random() * low.length)];
   }
-  // BetterBot: mostly points, with half an eye on the tiles it keeps
+  // ThantBot (medium): mostly points, with half an eye on the tiles it keeps
   function pickBetter(moves, bag) {
     const p = places(moves);
     if (!p.length) return fallback(moves, bag);
@@ -55,7 +59,7 @@ export function createPractice(ctx) {
     if (best.score < 8 && moves[0] && moves[0].action === 'exchange' && bag >= RACK) return moves[0];
     return best;
   }
-  // SteeBot: Quackle's top play by equity: score, the leave and board defence together
+  // CinBot (hard): Quackle's top play by equity: score, the leave and board defence together
   function pickStee(moves, bag) {
     const top = moves[0];
     if (!top) return { action: 'pass' };
@@ -460,9 +464,9 @@ export function createPractice(ctx) {
     }).join('');
     const o = 1 - p, backs = G.racks[o].map((_, k) => `<span class="rtile back ${arriving.has(o + ':' + k) ? 'arriving' : ''}" data-tile="${o}:${k}" aria-hidden="true"></span>`).join('');
     box.innerHTML = `
-      <div class="shelf ${G.turn === p || G.over ? 'mover' : ''}" data-player="${p}"><div class="shelf-head"><b>${name(p)}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : G.turn === p ? 'your turn' : 'waiting'}</span></div>
+      <div class="shelf ${G.turn === p || G.over ? 'mover' : ''}" data-player="${p}"><div class="shelf-head"><b>${nameHtml(p)}</b><span class="shelf-pts">${G.scores[p]}</span><span class="shelf-tag">${G.over ? 'game over' : G.turn === p ? 'your turn' : 'waiting'}</span></div>
         <div class="rack px-rack">${mine || '<span class="hint">No tiles left</span>'}</div></div>
-      <div class="shelf ${G.opp && G.turn === o && !G.over ? 'mover' : ''}" data-player="${o}"><div class="shelf-head"><b>${name(o)}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">${G.opp && G.turn === o && !G.over ? 'thinking…' : 'face down'}</span></div>
+      <div class="shelf ${G.opp && G.turn === o && !G.over ? 'mover' : ''}" data-player="${o}"><div class="shelf-head"><b>${nameHtml(o)}</b><span class="shelf-pts">${G.scores[o]}</span><span class="shelf-tag">${G.opp && G.turn === o && !G.over ? 'thinking…' : 'face down'}</span></div>
         <div class="rack">${backs || '<span class="hint">No tiles left</span>'}</div></div>`;
   }
 
@@ -554,7 +558,7 @@ export function createPractice(ctx) {
     renderBreakdown(ev);
     $('pxMsg').textContent = message.text; $('pxMsg').className = 'status ' + message.cls; $('pxMsg').hidden = !message.text;
     $('pxBag').textContent = `Bag: ${G.bag.length} tile${G.bag.length === 1 ? '' : 's'}`;
-    $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">${name(p)}${p === G.turn && !G.over ? (G.opp && p === BOT ? ' · thinking' : ' · to play') : ''}</div><div class="pts">${s}</div></div>`).join('');
+    $('pxScores').innerHTML = G.scores.map((s, p) => `<div class="pl ${p === G.turn && !G.over ? 'turn' : ''}"><div class="who">${nameHtml(p)}${p === G.turn && !G.over ? (G.opp && p === BOT ? ' · thinking' : ' · to play') : ''}</div><div class="pts">${s}</div></div>`).join('');
     // your controls rest while the computer is choosing its move
     const playing = !G.over && !isBotTurn();
     $('pxPlay').disabled = !playing || !!swap || !ev.ok;
@@ -586,7 +590,7 @@ export function createPractice(ctx) {
       return;
     }
     const e = G.history[k], before = boardBefore(k);
-    title.innerHTML = `Quackle review <span class="n">Move ${k + 1}, ${name(e.player)}</span>`;
+    title.innerHTML = `Quackle review <span class="n">Move ${k + 1}, ${nameHtml(e.player)}</span>`;
     if (G.opp && e.player === BOT) { box.innerHTML = `<p class="hint">${name(BOT)}'s move. Quackle reviews your moves; pick one of yours in the list below to see it.</p>`; return; }
     const rack = `<p class="qk-rack">Rack ${[...e.rack].map(ch => `<span class="mini">${ch}</span>`).join('')}</p>`;
     if (e.analysing || (!e.analysis && !e.analysisError)) { box.innerHTML = `${rack}<p class="status"><span class="spinner"></span>${engine.state() === 'ready' ? 'Quackle is looking at this move…' : 'Loading Quackle (about 26 MB the first time)…'}</p>`; return; }
@@ -623,7 +627,7 @@ export function createPractice(ctx) {
       G.history.map((e, k) => {
         const play = e.kind === 'play' ? `${e.place} <span class="word">${escapeHtml(e.words[0])}</span>${e.bingo ? '<span class="bingo">BINGO</span>' : ''}` : e.kind === 'exchange' ? `Exchange ${e.tiles.length}` : 'Pass';
         const qk = G.opp && e.player === BOT ? '' : e.analysis ? (e.analysis.loss === null ? '–' : e.analysis.loss < 0.05 ? '<span class="okmark">✓</span>' : `−${e.analysis.loss.toFixed(1)}`) : e.analysisError ? '!' : '…';
-        return `<tr class="mv ${k === viewing ? 'cur' : ''}" data-view="${k}"><td>${k + 1}</td><td>${G.opp ? (e.player === BOT ? escapeHtml(name(BOT)) : 'You') : `P${e.player + 1}`}</td><td>${play}</td><td class="num">${e.score}</td><td class="num qk">${qk}</td></tr>`;
+        return `<tr class="mv ${k === viewing ? 'cur' : ''}" data-view="${k}"><td>${k + 1}</td><td>${G.opp ? (e.player === BOT ? botTag(G.opp) : 'You') : `P${e.player + 1}`}</td><td>${play}</td><td class="num">${e.score}</td><td class="num qk">${qk}</td></tr>`;
       }).reverse().join('')}</tbody></table>`;
   }
 
@@ -695,7 +699,9 @@ export function createPractice(ctx) {
 
   // wire up the panel
   try { const o = localStorage.getItem('mabble.practiceOpp'); if (o !== null && [...$('pxOpp').options].some(x => x.value === o)) $('pxOpp').value = o; } catch (e) {}
-  $('pxOpp').onchange = () => { try { localStorage.setItem('mabble.practiceOpp', $('pxOpp').value); } catch (e) {} };
+  const showOppTag = () => { const v = $('pxOpp').value; $('pxOppTag').innerHTML = BOTS[v] ? botTag(v) : ''; };
+  $('pxOpp').onchange = () => { try { localStorage.setItem('mabble.practiceOpp', $('pxOpp').value); } catch (e) {} showOppTag(); };
+  showOppTag();
   $('pxPlay').onclick = play;
   $('pxRecall').onclick = () => recall();
   $('pxShuffle').onclick = shuffleRack;

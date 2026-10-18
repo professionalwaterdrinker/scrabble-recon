@@ -345,6 +345,15 @@ td.qk.best { color: var(--ok); font-weight: 600; }
 .px-foot .bag { font: 500 13px var(--f-mono); color: var(--muted); }
 .px-opp { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13.5px; color: var(--muted); }
 .px-opp select { font: inherit; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+/* computer opponents' names, outlined in their difficulty colour */
+.bot-tag { display: inline-block; padding: 0 7px; border: 2px solid var(--lvl); border-radius: 7px; color: var(--lvl-ink); font-weight: 700; line-height: 1.35; white-space: nowrap; background: color-mix(in srgb, var(--lvl) 10%, transparent); }
+.bot-tag.lvl-easy { --lvl: #2f9e5b; --lvl-ink: #1f7a43; }
+.bot-tag.lvl-medium { --lvl: #e09a1f; --lvl-ink: #9a6206; }
+.bot-tag.lvl-hard { --lvl: #d63c32; --lvl-ink: #b0281f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bot-tag { --lvl-ink: var(--lvl); } }
+:root[data-theme="dark"] .bot-tag { --lvl-ink: var(--lvl); }
+#pxOppTag:empty { display: none; }
+.pl .who .bot-tag, .shelf-head .bot-tag { margin-right: 2px; }
 #pxHistory { max-height: 320px; }
 .okmark { color: var(--ok); font-weight: 600; }
 .blank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
@@ -1219,3 +1228,8 @@ kbd { font: 600 11.5px var(--f-mono); padding: 2px 7px; border-radius: 6px; bord
 }
 :root[data-skin="felt"] .px-opp { font-size: 16px; }
 :root[data-skin="brute"] .px-opp select { border: 2px solid var(--line); border-radius: 0; font-family: var(--f-head); }
+:root[data-skin="brute"] .bot-tag { border-radius: 0; font-family: var(--f-head); text-transform: uppercase; letter-spacing: .05em; box-shadow: 2px 2px 0 var(--lvl); }
+:root[data-skin="felt"] .bot-tag { font-weight: 400; border-radius: 6px; --lvl-ink: #fff; background: color-mix(in srgb, var(--lvl) 30%, transparent); box-shadow: 0 2px 0 rgba(0, 0, 0, .35); text-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
+:root[data-skin="felt"] .bot-tag.lvl-easy { --lvl: #4bc292; } :root[data-skin="felt"] .bot-tag.lvl-medium { --lvl: #f5c04a; } :root[data-skin="felt"] .bot-tag.lvl-hard { --lvl: #fe5f55; }
+/* inside a heading label chip, a tag keeps its own background so its colour still reads */
+.card h2 .n .bot-tag { background: var(--surface); text-transform: none; letter-spacing: 0; }

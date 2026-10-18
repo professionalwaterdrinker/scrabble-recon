@@ -145,10 +145,10 @@ For Quackle, the app builds a DAWG from your list on your device, which takes a 
 
 The **Practice** tab is an untimed game, against yourself or the computer. It deals two racks from a shuffled 100-tile bag. Against yourself you play each rack in turn, and the rack not on turn stays face down.
 
-- **Playing the computer.** Choose an **Opponent** before **New game**. There are three levels, in the spirit of Woogles' bots. Each one asks Quackle for its 40 best plays with its own rack (it never sees yours), then picks one its own way:
-  - **BasicBot (easy)** picks at random from the lower-scoring two thirds and rarely plays a bingo.
-  - **BetterBot (medium)** goes for points, with half an eye on the tiles it keeps.
-  - **SteeBot (hard)** plays Quackle's top play by equity, which weighs score, leave and board defence together.
+- **Playing the computer.** Choose an **Opponent** before **New game**. There are three levels, in the spirit of Woogles' bots, each named in an outline coloured by difficulty: green, amber or red. Each one asks Quackle for its 40 best plays with its own rack (it never sees yours), then picks one its own way:
+  - **MoBot (easy)** picks at random from the lower-scoring two thirds and rarely plays a bingo.
+  - **ThantBot (medium)** goes for points, with half an eye on the tiles it keeps.
+  - **CinBot (hard)** plays Quackle's top play by equity, which weighs score, leave and board defence together.
 
   You always start, your rack stays face up and the computer's stays face down. Quackle reviews your moves only. The computer needs the Quackle engine (about 26 MB the first time).
 
