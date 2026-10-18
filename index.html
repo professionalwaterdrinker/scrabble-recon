@@ -82,17 +82,6 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
           <span><i class="rtile key unknown">?</i>Never played, unknown</span>
           <span id="bagCount" class="bag"></span>
         </div>
-        <details class="shelf-how">
-          <summary class="hint">How racks are worked out</summary>
-          <p class="note">Each player starts with 7 tiles and draws as many as they play. Every tile a player puts down had to be drawn before that move. The app considers every draw order that fits, as if from a well-shuffled bag, and shows how often each tile was on the rack. Tiles marked certain were on the rack in every possible order: the ones played that turn, ones later plays forced onto the rack, and everything once the bag is empty. Tiles never played can only be named when the game finished with one player going out. This assumes the rebuilt order is right and that nobody passed or exchanged tiles.</p>
-        </details>
-      </div>
-      <div class="legend" id="legend">
-        <span><i style="background:var(--tw)"></i>Triple word</span>
-        <span><i style="background:var(--dw)"></i>Double word</span>
-        <span><i style="background:var(--tl)"></i>Triple letter</span>
-        <span><i style="background:var(--dl)"></i>Double letter</span>
-        <span><i style="background:var(--tile);box-shadow:0 0 0 2px var(--hot)"></i>Just played</span>
       </div>
     </section>
 
@@ -171,7 +160,6 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
       <div id="practice" class="panel" hidden>
         <div class="card">
           <h2>Practice game</h2>
-          <p class="hint">Play an untimed game against yourself, taking each rack in turn. The rack not on turn stays face down. After every move, Quackle shows the plays with the highest equity next to yours.</p>
           <div class="scores" id="pxScores"></div>
           <div class="row px-controls">
             <button class="btn primary" id="pxPlay" disabled>Play</button>

@@ -759,7 +759,7 @@ function renderReplay() {
     return `<div class="pl ${p === nextP ? 'turn' : ''}"><div class="who">Player ${p + 1}${p === nextP ? ' · to play' : ''}</div><div class="pts">${v + (S.step === n ? a : 0)}</div><div class="fin">${finText}</div></div>`;
   }).join('');
   const tiles = S.cells.filter(Boolean).length;
-  $('replayMeta').textContent = `${n} moves, ${tiles} tiles, ${mv.filter(m => m.bingo).length} using all seven tiles. Player 1 is assumed to have moved first. Found in ${(S.meta.ms / 1000).toFixed(1)} s. ${S.meta.note}`;
+  $('replayMeta').textContent = `${n} moves, ${tiles} tiles, ${mv.filter(m => m.bingo).length} using all seven tiles. Player 1 is assumed to have moved first. ${S.meta.note}`;
   renderEndgame(adj);
   renderShelves();
   renderAnalysis();
@@ -817,7 +817,6 @@ function setMode(mode) {
   $('transport').hidden = mode !== 'replay';
   $('shelves').hidden = mode !== 'replay';
   $('pxRackBox').hidden = mode !== 'practice';
-  $('legend').hidden = mode === 'practice';
   $('tab-setup').setAttribute('aria-selected', mode === 'setup');
   $('tab-replay').setAttribute('aria-selected', mode === 'replay');
   $('tab-practice').setAttribute('aria-selected', mode === 'practice');
