@@ -402,8 +402,9 @@ export function createPractice(ctx) {
     return list;
   }
   function launch(list) {
-    const bag = $('tileBag'), mouth = bag.querySelector('.bag-art').getBoundingClientRect();
-    const bx = mouth.left + mouth.width / 2, by = mouth.top + mouth.height * 0.3, count = $('tileBagCount');
+    const bag = $('tileBag'), art = bag.querySelector('.bag-art').getBoundingClientRect(), mouth = art;
+    // tiles come out of the bag's open mouth, near the top right of the sprite
+    const bx = mouth.left + mouth.width * 0.78, by = mouth.top + mouth.height * 0.2, count = $('tileBagCount');
     let left = list.length;
     count.textContent = G.bag.length + left;
     list.forEach((t, n) => setTimeout(() => {
