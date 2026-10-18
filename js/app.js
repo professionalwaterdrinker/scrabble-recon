@@ -1,6 +1,7 @@
 import { CornerPicker, loadWorkingImage, readBoardLocally } from './localreader.js';
 import { deduceRacks, estimateRacks } from './racks.js';
 import { createPractice } from './practice.js';
+import { createStudy } from './study.js';
 import { createSimulator, simSectionHtml } from './simulate.js';
 import * as explainFacts from './explain.js';
 
@@ -418,7 +419,9 @@ function onResult(m) {
   S.meta = { ms: m.ms, nodes: m.nodes, strict: m.strict, note, realism: m.realism };
   solveStatus('');
   S.step = 1;
-  setMode('replay');
+  // don't pull someone out of Practice or Study when the sample finishes rebuilding
+  if (S.mode === 'setup' || S.mode === 'replay') setMode('replay');
+  else $('tab-replay').disabled = false;
   if (QK.state === 'ready') qkRunAll();
 }
 $('solveBtn').onclick = () => { S.seed = 0; S.players = +$('players').value; runSolve(); };
@@ -801,14 +804,19 @@ function setMode(mode) {
   $('setup').hidden = mode !== 'setup';
   $('replay').hidden = mode !== 'replay';
   $('practice').hidden = mode !== 'practice';
+  document.querySelector('main.layout').hidden = mode === 'study';
+  $('study').hidden = mode !== 'study';
   $('transport').hidden = mode !== 'replay';
   $('shelves').hidden = mode !== 'replay';
   $('pxRackBox').hidden = mode !== 'practice';
   $('tab-setup').setAttribute('aria-selected', mode === 'setup');
   $('tab-replay').setAttribute('aria-selected', mode === 'replay');
   $('tab-practice').setAttribute('aria-selected', mode === 'practice');
+  $('tab-study').setAttribute('aria-selected', mode === 'study');
   $('tab-replay').disabled = !S.moves;
   boardEl.classList.remove('editable');
+  if (mode !== 'study') study.leave();
+  if (mode === 'study') { study.enter(); return; }
   if (mode === 'replay') renderReplay();
   else if (mode === 'practice') practice.enter();
   else renderChecks();
@@ -817,6 +825,7 @@ function setMode(mode) {
 $('tab-setup').onclick = () => setMode('setup');
 $('tab-replay').onclick = () => S.moves && setMode('replay');
 $('tab-practice').onclick = () => setMode('practice');
+$('tab-study').onclick = () => setMode('study');
 
 /* ---------- word list ---------- */
 // The built-in ENABLE list, or a list the viewer loads from their own file.
@@ -861,6 +870,7 @@ function applyLexicon(entry) {
   if (S.mode === 'replay' && QK.state === 'ready') qkRunAll();
   renderChecks(); renderBoard();
   if (S.mode === 'practice') practice.render();
+  study.lexiconChanged().then(() => study.refreshBadge());
 }
 async function bootLexicon() {
   try {
@@ -1012,6 +1022,14 @@ const practice = createPractice({
   },
 });
 $('editBtn').onclick = () => setMode('setup');
+
+/* ---------- study ---------- */
+const study = createStudy({
+  $, escapeHtml,
+  // reviews are kept per word list; a reloaded copy of the same list keeps its history
+  lexicon: () => ({ key: LEX.key, vaultKey: LEX.builtin ? 'enable' : 'user:' + LEX.name, name: LEX.name, set: DICT }),
+  onStats: s => { const n = s.due + Math.min(s.fresh, s.newLeft), b = $('studyBadge'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; },
+});
 
 /* ---------- boot ---------- */
 buildBoard();

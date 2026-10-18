@@ -1,6 +1,6 @@
 // Offline support: serve the app shell and word list from cache, refresh them in the background.
 // Bump VERSION when you change any file listed in SHELL.
-const VERSION = 'mabble-v21';
+const VERSION = 'mabble-v22';
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,9 @@ const SHELL = [
   'js/practice.js',
   'js/simulate.js',
   'js/explain.js',
+  'js/study.js',
+  'js/study-lists.js',
+  'js/vault.js',
   'js/solver.js',
   'data/words.txt',
   'manifest.webmanifest',

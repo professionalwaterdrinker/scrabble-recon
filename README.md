@@ -78,6 +78,10 @@ When you change any file listed in [`sw.js`](sw.js), bump `VERSION` there so ins
 | `js/simulate.js` | Runs Quackle simulations on several engine workers in parallel |
 | `js/explain.js` | Facts and checklist behind "Why is Quackle's play better?" |
 | `js/practice.js` | Practice mode: rules, scoring, rack input and Quackle reviews |
+| `js/study.js` | Study tab: word-list browser and flashcard review screens |
+| `js/study-lists.js` | Builds the study lists (anagrams, probability order, stems, hooks) from the active word list |
+| `js/vault.js` | Spaced-review scheduling and storage, and Wiktionary definitions |
+| `tools/reader-bench.html`, `tools/rebuild-bench.html` | Test benches for the photo reader and the game rebuild |
 | `quackle-test.html` | Test bench for Quackle move analysis |
 | `engine/` | The built Quackle engine. Not in Git: the deploy fetches it from the `quackle-build` branch |
 
@@ -147,6 +151,22 @@ The **Practice** tab is an untimed game against yourself. It deals two racks fro
 - **Running totals.** The move list shows how much equity each move gave up, with a total for each player.
 - **The ending** follows standard rules: going out with the bag empty earns the other rack's value, and six scoreless turns in a row end the game.
 - **Saved automatically.** The game is saved in your browser, so you can come back to it later.
+
+## Study
+
+The **Study** tab is for learning words, in the spirit of Aerolith's Wordwalls and WordVault but simpler.
+
+**Word lists.** Curated lists worked out from the active word list, in your browser:
+- **Must-know:** two-letter words, three-letter words and short J, Q, X and Z words.
+- **Bingos:** the 500 most likely seven- and eight-letter words (by how often their tiles are drawn) and the best six-letter bingo stems.
+- **Specialty:** vowel-heavy words and Q without U.
+- **Hooks:** the letters that go before and after each two-letter word.
+
+Each card shows the letters as tiles with a cue such as "3 words". Faint letters either side of a word are its hooks. **Hide answers** turns a list into a self-quiz, and tapping a word shows its definition. Definitions come from [Wiktionary](https://en.wiktionary.org/) (CC BY-SA). They're fetched only when you open a word, sending just that word to Wiktionary, and then saved on your device.
+
+**Review.** Add a list and its cards join your reviews, 15 new ones a day. Answer by flipping the card or by typing every word the letters make. Grade **Again**, **Good** or **Easy**. Each Good moves a card up a box, and the wait before it comes back grows: 1, 3, 7, 14, 30, 60, then 120 days. Again brings it back in the same session. The schedule, streak and progress are kept in this browser's IndexedDB, separately for each word list.
+
+**Keys:** <kbd>Space</kbd> shows the answer, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> grade it, <kbd>Enter</kbd> checks a typed word (an empty Enter shows the answer), <kbd>Esc</kbd> ends the session, <kbd>/</kbd> searches a list and <kbd>?</kbd> lists them all.
 
 ## Licence
 

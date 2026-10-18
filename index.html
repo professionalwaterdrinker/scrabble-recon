@@ -41,6 +41,7 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>
       <button role="tab" id="tab-practice" aria-selected="false">Practice</button>
+      <button role="tab" id="tab-study" aria-selected="false">Study<span class="tab-badge" id="studyBadge" hidden></span></button>
     </div>
     </div>
   </header>
@@ -208,6 +209,9 @@ try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentEl
       </div>
     </aside>
   </main>
+
+  <!-- STUDY: word lists and spaced review, drawn by js/study.js -->
+  <section id="study" class="study" aria-label="Study" hidden></section>
 </div>
 
 <dialog id="lexDialog" aria-labelledby="lexTitle">
