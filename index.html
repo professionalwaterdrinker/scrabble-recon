@@ -5,14 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mabble</title>
 <meta name="description" content="Photograph a finished Scrabble board and rebuild the game move by move, with scores.">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="theme-color" content="#1d4740">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script>
+// Optional poster skin: applied before the page draws, with its fonts loaded only when chosen
+try { if (localStorage.getItem('mabble.skin') === 'brute') { document.documentElement.dataset.skin = 'brute'; document.write('<link rel="stylesheet" id="skinFonts" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap">'); } } catch (e) {}
+</script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -33,6 +37,7 @@
     </div>
     <div class="head-tools">
     <button class="btn lex-btn" id="lexBtn" type="button" title="Choose the word list">Words: ENABLE</button>
+    <button class="btn lex-btn" id="skinBtn" type="button" title="Switch between the classic look and the poster look">Skin: Classic</button>
     <div class="tabs" role="tablist" aria-label="Mode">
       <button role="tab" id="tab-setup" aria-selected="true">1 &middot; Board</button>
       <button role="tab" id="tab-replay" aria-selected="false" disabled>2 &middot; Replay</button>

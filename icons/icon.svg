@@ -1,8 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0a0a0a"/>
-  <path d="M0 330 L512 150 L512 210 L0 390 Z" fill="#d6141c"/>
-  <rect x="104" y="96" width="304" height="320" rx="24" fill="#d6141c"/>
-  <rect x="104" y="96" width="304" height="300" rx="24" fill="#fbfaf6" stroke="#0a0a0a" stroke-width="10"/>
-  <text x="246" y="330" text-anchor="middle" font-family="Impact, Arial Black, sans-serif" font-size="230" fill="#0a0a0a">M</text>
-  <text x="368" y="372" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="56" fill="#0a0a0a">3</text>
+  <rect width="512" height="512" rx="96" fill="#1d4740"/>
+  <rect x="104" y="96" width="304" height="320" rx="40" fill="#c9ae7c"/>
+  <rect x="104" y="96" width="304" height="300" rx="40" fill="#f2e0b7"/>
+  <text x="246" y="330" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="210" fill="#2a1d0f">M</text>
+  <text x="368" y="372" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="56" fill="#2a1d0f">3</text>
 </svg>

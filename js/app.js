@@ -903,6 +903,27 @@ async function openLexDialog() {
   $('lexDialog').showModal();
 }
 $('lexBtn').onclick = openLexDialog;
+
+// ---- skin: classic (default) or the poster look ----
+const POSTER_FONTS = 'https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@500;600;700&display=swap';
+function applySkin(skin) {
+  const poster = skin === 'brute';
+  if (poster) document.documentElement.dataset.skin = 'brute';
+  else delete document.documentElement.dataset.skin;
+  if (poster && !document.getElementById('skinFonts')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.id = 'skinFonts'; link.href = POSTER_FONTS;
+    document.head.appendChild(link);
+  }
+  document.querySelector('meta[name="theme-color"]').content = poster ? '#0a0a0a' : '#1d4740';
+  $('skinBtn').textContent = `Skin: ${poster ? 'Poster' : 'Classic'}`;
+}
+applySkin(document.documentElement.dataset.skin);
+$('skinBtn').onclick = () => {
+  const skin = document.documentElement.dataset.skin === 'brute' ? 'classic' : 'brute';
+  try { localStorage.setItem('mabble.skin', skin); } catch (e) {}
+  applySkin(skin);
+};
 $('lexFile').onchange = async e => {
   const f = e.target.files[0];
   pendingList = null; $('lexUse').disabled = true;
