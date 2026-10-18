@@ -1,7 +1,8 @@
 // Reads a board photo on this device: free, no account, nothing uploaded.
-// The person drags four corners onto the grid; we straighten the photo, find
-// which squares hold tiles by colour, and match each letter's shape against
-// reference letters, then against the clearest tiles on the same board.
+// The person drags four corners onto the grid; we straighten the photo, find the
+// letters printed on tile-coloured areas wherever the tiles actually sit, work out
+// which square each belongs to, and match each letter's shape against reference
+// letters, then against the clearest tiles on the same board.
 
 const N = 15;
 const CELL = 64;            // pixels per square in the straightened board
@@ -36,18 +37,19 @@ export async function loadWorkingImage(file) {
   return canvas;
 }
 
-// Straighten the quad inside `src` into a square board image, bilinear sampled.
-export function warp(src, corners, size = CELL * N) {
-  const sw = src.width, sh = src.height;
+// Straighten the quad inside `src` into a square board image, bilinear sampled,
+// with `pad` squares of margin on every side (so tiles pushed past the edge stay in view).
+export function warp(src, corners, pad = 0) {
+  const sw = src.width, sh = src.height, size = CELL * (N + pad * 2);
   const sd = src.getContext('2d').getImageData(0, 0, sw, sh).data;
   const out = document.createElement('canvas');
   out.width = out.height = size;
-  const ctx = out.getContext('2d');
+  const ctx = out.getContext('2d', { willReadFrequently: true });
   const img = ctx.createImageData(size, size), od = img.data;
   const map = squareToQuad(corners);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      let [sx, sy] = map((x + 0.5) / size, (y + 0.5) / size);
+      let [sx, sy] = map(((x + 0.5) / CELL - pad) / N, ((y + 0.5) / CELL - pad) / N);
       sx = Math.min(sw - 1.001, Math.max(0, sx - 0.5)); sy = Math.min(sh - 1.001, Math.max(0, sy - 0.5));
       const ix = sx | 0, iy = sy | 0, fx = sx - ix, fy = sy - iy;
       const i00 = (iy * sw + ix) * 4, i10 = i00 + 4, i01 = i00 + sw * 4, i11 = i01 + 4;
@@ -136,57 +138,65 @@ export class CornerPicker {
   }
 }
 
-/* ---------- tile detection ---------- */
+/* ---------- tile finding ---------- */
 
+// Real tiles rarely sit square in their squares, so tiles are not read from fixed cells.
+// Instead: learn the colour of a tile face, find the letters printed on tile-coloured
+// areas, fit how the grid sits under them (this also absorbs slightly misplaced corners),
+// then give each letter the nearest free square. Tile faces left without a letter are blanks.
+
+const PAD = 1;                 // squares of margin warped around the grid
 const lum = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
 const median = a => { const s = Float64Array.from(a).sort(); return s.length ? s[s.length >> 1] : 0; };
+const pct = (a, q) => { const s = Float64Array.from(a).sort(); return s.length ? s[Math.min(s.length - 1, Math.floor(s.length * q))] : 0; };
 
-function cellStats(data, size, r, c) {
-  const x0 = c * CELL, y0 = r * CELL, m = Math.round(CELL * 0.14);
-  const R = [], G = [], B = [], L = [];
-  for (let y = y0 + m; y < y0 + CELL - m; y++) {
-    for (let x = x0 + m; x < x0 + CELL - m; x++) {
-      const i = (y * size + x) * 4;
-      R.push(data[i]); G.push(data[i + 1]); B.push(data[i + 2]); L.push(lum(data[i], data[i + 1], data[i + 2]));
+// How far a pixel's colour is from the tile face, forgiving uneven light.
+function faceDistance(r, g, b, ref, refL) {
+  const l = Math.max(1, lum(r, g, b)), k = refL / l;
+  return Math.hypot(r * k - ref[0], g * k - ref[1], b * k - ref[2]) + Math.max(0, Math.abs(Math.log(l / refL)) - 0.3) * 60;
+}
+
+// The face colour: the lighter part of squares that look like a light tile carrying a dark letter.
+function faceColour(data, size) {
+  const cands = [];
+  const m = Math.round(CELL * 0.14);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const x0 = (c + PAD) * CELL, y0 = (r + PAD) * CELL, px = [];
+    for (let y = y0 + m; y < y0 + CELL - m; y += 2) for (let x = x0 + m; x < x0 + CELL - m; x += 2) {
+      const i = (y * size + x) * 4; px.push([data[i], data[i + 1], data[i + 2], lum(data[i], data[i + 1], data[i + 2])]);
     }
+    px.sort((a, b) => a[3] - b[3]);
+    const top = px.slice(Math.floor(px.length * 0.4));
+    const med = [0, 1, 2].map(k => median(top.map(p => p[k]))), ml = lum(...med);
+    const dark = px.filter(p => p[3] < ml * 0.62).length / px.length;
+    if (dark > 0.04 && dark < 0.5 && ml > 95) cands.push({ med, top });
   }
-  const med = [median(R), median(G), median(B)], ml = lum(...med);
-  let dark = 0;
-  for (const l of L) if (l < ml * 0.62) dark++;
-  return { med, ml, dark: dark / L.length };
+  if (cands.length < 2) return null;
+  let ref = [0, 1, 2].map(k => median(cands.map(s => s.med[k])));
+  // drop printed premium squares and the like, then settle on the tiles' own colour
+  const near = cands.filter(s => Math.hypot(s.med[0] - ref[0], s.med[1] - ref[1], s.med[2] - ref[2]) < 60);
+  if (near.length >= 2) ref = [0, 1, 2].map(k => median(near.map(s => s.med[k])));
+  const refL = lum(...ref);
+  const ds = [];
+  for (const s of near.length >= 2 ? near : cands) for (const p of s.top) ds.push(faceDistance(p[0], p[1], p[2], ref, refL));
+  return { ref, refL, limit: Math.max(14, Math.min(34, pct(ds, 0.9) * 1.4)) };
 }
 
-// Tiles are the squares that share one light background colour and carry a dark letter.
-export function findTiles(board) {
-  const size = board.width, data = board.getContext('2d').getImageData(0, 0, size, size).data;
-  const stats = [];
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) stats.push(cellStats(data, size, r, c));
-  const lettered = stats.filter(s => s.dark > 0.05 && s.dark < 0.5 && s.ml > 95);
-  if (lettered.length < 2) return { tiles: new Set(), stats };
-  const ref = [0, 1, 2].map(k => median(lettered.map(s => s.med[k])));
-  const dist = s => Math.hypot(s.med[0] - ref[0], s.med[1] - ref[1], s.med[2] - ref[2]);
-  // threshold from the spread of the lettered cells, within sane bounds
-  const spread = median(lettered.map(dist));
-  const limit = Math.max(28, Math.min(70, spread * 2.6));
-  const tiles = new Set();
-  stats.forEach((s, i) => { if (s.dark > 0.025 && s.dark < 0.55 && dist(s) < limit) tiles.add(i); });
-  return { tiles, stats, ref };
-}
-
-/* ---------- letter shapes ---------- */
-
-const G = 32; // letters are compared on a G x G grid
-
-function otsu(L) {
-  const hist = new Array(256).fill(0); L.forEach(v => hist[Math.max(0, Math.min(255, v | 0))]++);
-  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
-  let wB = 0, sB = 0, best = 0, thr = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += hist[t]; if (!wB) continue; const wF = L.length - wB; if (!wF) break;
-    sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2;
-    if (v > best) { best = v; thr = t; }
+// Summed-area table, so any box total is four lookups.
+function integral(v, size) {
+  const S = size + 1, I = new Float64Array(S * S);
+  for (let y = 0; y < size; y++) {
+    let row = 0;
+    for (let x = 0; x < size; x++) { row += v[y * size + x]; I[(y + 1) * S + x + 1] = I[y * S + x + 1] + row; }
   }
-  return thr;
+  return I;
+}
+function boxSum(I, size, x0, y0, x1, y1) {
+  x0 = Math.max(0, Math.min(size, Math.round(x0))); x1 = Math.max(0, Math.min(size, Math.round(x1)));
+  y0 = Math.max(0, Math.min(size, Math.round(y0))); y1 = Math.max(0, Math.min(size, Math.round(y1)));
+  if (x1 <= x0 || y1 <= y0) return [0, 0];
+  const S = size + 1;
+  return [I[y1 * S + x1] - I[y0 * S + x1] - I[y1 * S + x0] + I[y0 * S + x0], (x1 - x0) * (y1 - y0)];
 }
 
 function components(ink, S) {
@@ -204,20 +214,134 @@ function components(ink, S) {
       if (y > 0 && ink[p - S] && lab[p - S] < 0) { lab[p - S] = id; st.push(p - S); }
       if (y < S - 1 && ink[p + S] && lab[p + S] < 0) { lab[p + S] = id; st.push(p + S); }
     }
-    comps.push({ n, minx, miny, maxx, maxy, edge, cx: (minx + maxx) / 2 / S, cy: (miny + maxy) / 2 / S });
+    comps.push({ id, n, minx, miny, maxx, maxy, edge, cx: (minx + maxx) / 2 / S, cy: (miny + maxy) / 2 / S });
   }
   return { lab, comps };
 }
 
-// Fit the kept ink into a G x G grid (keeping its proportions), soften it, and
-// scale to unit length so a dot product gives normalised correlation.
-function toVector(ink, lab, keep, S) {
-  let minx = S, miny = S, maxx = -1, maxy = -1;
-  for (let i = 0; i < S * S; i++) if (ink[i] && keep[lab[i]]) {
-    const x = i % S, y = (i / S) | 0;
-    if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+// Letters: dark marks on tile-coloured surroundings, about the height a tile letter is.
+export function findLetters(board) {
+  const size = board.width, data = board.getContext('2d').getImageData(0, 0, size, size).data;
+  const face = faceColour(data, size);
+  if (!face) return null;
+  const P = size * size, L = new Float32Array(P), mask = new Uint8Array(P), ml = new Float32Array(P);
+  for (let i = 0; i < P; i++) {
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    L[i] = lum(r, g, b);
+    if (faceDistance(r, g, b, face.ref, face.refL) < face.limit) { mask[i] = 1; ml[i] = L[i]; }
   }
-  if (maxx < 0) return null;
+  const IM = integral(mask, size), IL = integral(ml, size);
+  const ink = new Uint8Array(P), near = CELL * 0.35;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x;
+    if (mask[i]) continue;
+    const [m, a] = boxSum(IM, size, x - near, y - near, x + near, y + near);
+    if (m < a * 0.3) continue;
+    const [lm, a2] = boxSum(IL, size, x - CELL, y - CELL, x + CELL, y + CELL), [mm] = boxSum(IM, size, x - CELL, y - CELL, x + CELL, y + CELL);
+    const tileL = mm > a2 * 0.05 ? lm / mm : face.refL;
+    if (L[i] < tileL * 0.6) ink[i] = 1;
+  }
+  const { lab, comps } = components(ink, size);
+  const II = integral(ink, size), ring = CELL * 0.12;
+  let blobs = comps.filter(k => {
+    const w = k.maxx - k.minx + 1, h = k.maxy - k.miny + 1;
+    if (h < CELL * 0.26 || h > CELL * 0.8 || w < CELL * 0.05 || w > CELL * 0.85) return false;
+    if (k.n < CELL * CELL * 0.008 || k.n < w * h * 0.12) return false;
+    const box = [k.minx - ring, k.miny - ring, k.maxx + 1 + ring, k.maxy + 1 + ring];
+    const [m, a] = boxSum(IM, size, ...box), [n] = boxSum(II, size, ...box);
+    return m >= (a - n) * 0.55;
+  });
+  const hm = median(blobs.map(k => k.maxy - k.miny + 1));
+  blobs = blobs.filter(k => { const h = k.maxy - k.miny + 1; return h > hm * 0.62 && h < hm * 1.45; });
+  // stroke width (twice the area over the outline length): bits of grid line between
+  // tiles are far thinner than a printed letter's strokes
+  const edge = new Float64Array(comps.length);
+  for (let y = 1; y < size - 1; y++) for (let x = 1; x < size - 1; x++) {
+    const i = y * size + x, id = lab[i];
+    if (id >= 0 && (lab[i - 1] !== id || lab[i + 1] !== id || lab[i - size] !== id || lab[i + size] !== id)) edge[id]++;
+  }
+  for (const k of blobs) k.stroke = (2 * k.n) / Math.max(1, edge[k.id]);
+  const sm = median(blobs.map(k => k.stroke));
+  blobs = blobs.filter(k => k.stroke > sm * 0.55);
+  for (const k of blobs) { k.x = (k.minx + k.maxx + 1) / 2; k.y = (k.miny + k.maxy + 1) / 2; }
+  return { blobs, ink, lab, mask, size, face, data };
+}
+
+// Solve a small least-squares system A x = b (normal equations, Gaussian elimination).
+function solve(A, b) {
+  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    if (Math.abs(M[c][c]) < 1e-9) return null;
+    for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
+// Where a letter on square (r, c) is expected, in board pixels, under the fitted model.
+const basis = (r, c) => { const u = r / (N - 1) - 0.5, v = c / (N - 1) - 0.5; return [1, u, v, u * v]; };
+function expected(model, r, c) {
+  const f = basis(r, c);
+  let dx = 0, dy = 0; for (let k = 0; k < 4; k++) { dx += model.x[k] * f[k]; dy += model.y[k] * f[k]; }
+  return [(c + PAD + 0.5) * CELL + dx, (r + PAD + 0.5) * CELL + dy];
+}
+
+// Pair letters with squares, nearest first, one letter per square.
+function assign(blobs, model) {
+  const pairs = [];
+  blobs.forEach((k, bi) => {
+    const c0 = Math.round(k.x / CELL - PAD - 0.5), r0 = Math.round(k.y / CELL - PAD - 0.5);
+    for (let r = r0 - 1; r <= r0 + 1; r++) for (let c = c0 - 1; c <= c0 + 1; c++) {
+      if (r < 0 || c < 0 || r >= N || c >= N) continue;
+      const [ex, ey] = expected(model, r, c), d = Math.hypot(k.x - ex, k.y - ey);
+      if (d < CELL * 0.72) pairs.push({ bi, cell: r * N + c, d });
+    }
+  });
+  pairs.sort((a, b) => a.d - b.d);
+  const byBlob = new Map(), used = new Set();
+  for (const p of pairs) if (!byBlob.has(p.bi) && !used.has(p.cell)) { byBlob.set(p.bi, p.cell); used.add(p.cell); }
+  return byBlob;
+}
+
+// Fit how the letters sit relative to the squares: an overall shift plus a gentle
+// stretch and skew, weighted so letters on knocked tiles don't pull it off.
+function fitGrid(blobs) {
+  let model = { x: [0, 0, 0, 0], y: [0, 0, 0, 0] };
+  for (let it = 0; it < 6; it++) {
+    const byBlob = assign(blobs, model), rows = [];
+    for (const [bi, cell] of byBlob) {
+      const r = (cell / N) | 0, c = cell % N, k = blobs[bi], [ex, ey] = expected(model, r, c);
+      const e = Math.hypot(k.x - ex, k.y - ey) / (CELL * 0.35), w = e < 1 ? (1 - e * e) ** 2 : 0;
+      if (w > 0) rows.push({ f: basis(r, c), w, dx: k.x - (c + PAD + 0.5) * CELL, dy: k.y - (r + PAD + 0.5) * CELL });
+    }
+    if (!rows.length) break;
+    const terms = rows.length >= 12 ? 4 : 1;
+    const next = {};
+    for (const axis of ['x', 'y']) {
+      const A = Array.from({ length: terms }, () => new Array(terms).fill(0)), b = new Array(terms).fill(0);
+      for (const q of rows) {
+        const t = axis === 'x' ? q.dx : q.dy;
+        for (let i = 0; i < terms; i++) { b[i] += q.w * q.f[i] * t; for (let j = 0; j < terms; j++) A[i][j] += q.w * q.f[i] * q.f[j]; }
+      }
+      // keep the stretch terms modest: corners are placed by hand, not wildly off
+      for (let i = 1; i < terms; i++) A[i][i] += rows.length * 0.02;
+      const s = solve(A, b);
+      next[axis] = s ? [...s, 0, 0, 0].slice(0, 4) : model[axis];
+    }
+    model = next;
+  }
+  return model;
+}
+
+/* ---------- letter shapes ---------- */
+
+const G = 32; // letters are compared on a G x G grid
+
+// Fit the ink for which has(x, y) is true, inside the given box, into a G x G grid
+// (keeping its proportions), soften it, and scale to unit length so a dot product
+// gives normalised correlation.
+function toVector(has, minx, miny, maxx, maxy) {
   const w = maxx - minx + 1, h = maxy - miny + 1, scale = (G - 4) / Math.max(w, h);
   const ox = (G - w * scale) / 2, oy = (G - h * scale) / 2;
   const g = new Float32Array(G * G);
@@ -226,7 +350,7 @@ function toVector(ink, lab, keep, S) {
     for (const [dx, dy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
       const sx = Math.floor((x + dx - ox) / scale) + minx, sy = Math.floor((y + dy - oy) / scale) + miny;
       if (sx < minx || sx > maxx || sy < miny || sy > maxy) continue;
-      const p = sy * S + sx; if (ink[p] && keep[lab[p]]) hit++;
+      if (has(sx, sy)) hit++;
     }
     g[y * G + x] = hit / 4;
   }
@@ -244,26 +368,17 @@ function toVector(ink, lab, keep, S) {
   return b;
 }
 
-// The letter on one tile, with the small point value and edge specks removed.
-function tileVector(board, idx) {
-  const r = (idx / N) | 0, c = idx % N;
-  const pad = Math.round(CELL * 0.07), S = CELL - pad * 2;
-  const src = board.getContext('2d').getImageData(c * CELL + pad, r * CELL + pad, S, S).data;
-  const L = new Float32Array(S * S);
-  for (let i = 0; i < S * S; i++) L[i] = lum(src[i * 4], src[i * 4 + 1], src[i * 4 + 2]);
-  const thr = otsu(L);
-  const ink = new Uint8Array(S * S); for (let i = 0; i < S * S; i++) ink[i] = L[i] < thr ? 1 : 0;
-  const { lab, comps } = components(ink, S);
-  const keep = comps.map(k => !k.edge && k.n > S * S * 0.004 && k.cx > 0.18 && k.cx < 0.74 && k.cy > 0.15 && k.cy < 0.8);
-  const big = Math.max(0, ...comps.filter((k, i) => keep[i]).map(k => k.n));
-  comps.forEach((k, i) => { if (keep[i] && k.n < big * 0.12) keep[i] = false; });
-  return toVector(ink, lab, keep, S);
+function blobVector(found, k) {
+  const { lab, size } = found;
+  return toVector((x, y) => lab[y * size + x] === k.id, k.minx, k.miny, k.maxx, k.maxy);
 }
 
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
 
-// Reference letters drawn in fonts close to the ones tile sets use.
+// Reference letters drawn in fonts close to the ones tile sets use, a little tilted
+// either way too, since tiles are rarely placed dead straight.
 const FONTS = ['Arial Black', 'Arial', 'Helvetica', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Gill Sans', 'Futura', 'Century Gothic', 'Franklin Gothic Medium', 'Georgia', 'Times New Roman', 'Rockwell', 'sans-serif', 'serif'];
+const TILTS = [0, -5, 5, -10, 10];
 let fontTemplates = null;
 function getFontTemplates() {
   if (fontTemplates) return fontTemplates;
@@ -272,15 +387,20 @@ function getFontTemplates() {
   fontTemplates = {};
   for (const ch of LETTERS) {
     const list = [], seen = new Set();
-    for (const font of FONTS) for (const weight of ['700', '900']) {
+    for (const font of FONTS) for (const weight of ['700', '900']) for (const tilt of TILTS) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, S, S);
-      ctx.fillStyle = '#000'; ctx.font = `${weight} 62px "${font}"`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(ch, S / 2, S / 2);
+      ctx.translate(S / 2, S / 2); ctx.rotate(tilt * Math.PI / 180);
+      ctx.fillStyle = '#000'; ctx.font = `${weight} 56px "${font}"`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(ch, 0, 0);
       const d = ctx.getImageData(0, 0, S, S).data, ink = new Uint8Array(S * S);
       for (let i = 0; i < S * S; i++) ink[i] = d[i * 4] < 128 ? 1 : 0;
       const { lab, comps } = components(ink, S);
-      const v = toVector(ink, lab, comps.map(k => k.n > 6), S);
-      if (!v) continue;
+      const keep = comps.filter(k => k.n > 6);
+      if (!keep.length) continue;
+      const ids = new Set(keep.map(k => k.id));
+      const v = toVector((x, y) => ids.has(lab[y * S + x]),
+        Math.min(...keep.map(k => k.minx)), Math.min(...keep.map(k => k.miny)), Math.max(...keep.map(k => k.maxx)), Math.max(...keep.map(k => k.maxy)));
       // fonts the device lacks fall back to one it has; skip those duplicates
       const key = Array.from(v.subarray(0, 96), x => x.toFixed(2)).join();
       if (!seen.has(key)) { seen.add(key); list.push(v); }
@@ -290,11 +410,17 @@ function getFontTemplates() {
   return fontTemplates;
 }
 
-function rank(vec, fontT, photoT) {
+// Best match against the reference fonts, per letter. Computed once per tile.
+function fontScores(vec, fontT) {
+  const out = {};
+  for (const ch of LETTERS) { let f = -1; for (const t of fontT[ch]) { const s = dot(vec, t); if (s > f) f = s; } out[ch] = f; }
+  return out;
+}
+
+function rank(vec, font, photoT) {
   const out = [];
   for (const ch of LETTERS) {
-    let f = -1; for (const t of fontT[ch]) { const s = dot(vec, t); if (s > f) f = s; }
-    const s = photoT && photoT[ch] ? 0.35 * f + 0.65 * dot(vec, photoT[ch]) : f;
+    const s = photoT && photoT[ch] ? 0.35 * font[ch] + 0.65 * dot(vec, photoT[ch]) : font[ch];
     out.push({ ch, s });
   }
   return out.sort((a, b) => b.s - a.s);
@@ -316,6 +442,51 @@ function photoTemplates(vecs, ranks) {
   return sums;
 }
 
+// Squares holding a tile face with no letter on it: blanks. A set has only two, and
+// every tile is part of a word, so only squares next to a lettered tile count, and only
+// when their colour is clearly nearer the tile faces than this board's empty squares.
+function findBlanks(found, model, lettered) {
+  const { data, ink, size } = found;
+  const P = size * size, ch = [0, 1, 2].map(() => new Float32Array(P)), clear = new Uint8Array(P);
+  for (let i = 0; i < P; i++) if (!ink[i]) { clear[i] = 1; for (let k = 0; k < 3; k++) ch[k][i] = data[i * 4 + k]; }
+  const IC = ch.map(v => integral(v, size)), IN = integral(clear, size), II = integral(ink, size);
+  // mean colour of the non-ink pixels in a box, and how much ink it holds
+  const colourAt = (x, y, h) => {
+    const [n, a] = boxSum(IN, size, x - h, y - h, x + h, y + h), [k] = boxSum(II, size, x - h, y - h, x + h, y + h);
+    return n ? { rgb: IC.map(I => boxSum(I, size, x - h, y - h, x + h, y + h)[0] / n), ink: k / a } : null;
+  };
+  const dist = (p, q) => faceDistance(p[0], p[1], p[2], q, Math.max(1, lum(...q)));
+  const faces = lettered.map(k => colourAt(k.x, k.y, CELL * 0.3)).filter(Boolean).map(c => c.rgb);
+  const usedCells = new Set(lettered.map(k => k.cell));
+  const empties = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (usedCells.has(r * N + c)) continue;
+    const [ex, ey] = expected(model, r, c), col = colourAt(ex, ey, CELL * 0.3);
+    if (col) empties.push(col.rgb);
+  }
+  if (faces.length < 3 || empties.length < 3) return [];
+  const F = [0, 1, 2].map(k => median(faces.map(f => f[k]))), E = [0, 1, 2].map(k => median(empties.map(f => f[k])));
+  const sep = dist(E, F);
+  if (sep < 20) return [];                       // tiles and squares look alike: can't tell
+  const cands = [];
+  for (const cell0 of usedCells) {
+    const r0 = (cell0 / N) | 0, c0 = cell0 % N;
+    for (const [r, c] of [[r0 - 1, c0], [r0 + 1, c0], [r0, c0 - 1], [r0, c0 + 1]]) {
+      if (r < 0 || c < 0 || r >= N || c >= N || usedCells.has(r * N + c) || cands.some(q => q.cell === r * N + c)) continue;
+      const [ex, ey] = expected(model, r, c);
+      let best = null;
+      for (let dy = -0.2; dy <= 0.2; dy += 0.1) for (let dx = -0.2; dx <= 0.2; dx += 0.1) {
+        const col = colourAt(ex + dx * CELL, ey + dy * CELL, CELL * 0.32);
+        if (!col || col.ink > 0.03) continue;
+        const d = dist(col.rgb, F);
+        if (!best || d < best.d) best = { d, e: dist(col.rgb, E) };
+      }
+      if (best && best.d < sep * 0.3 && best.d < best.e * 0.5) cands.push({ cell: r * N + c, d: best.d });
+    }
+  }
+  return cands.sort((a, b) => a.d - b.d).slice(0, 2).map(q => q.cell);
+}
+
 export class LocalReadError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
@@ -327,41 +498,52 @@ export async function readBoardLocally(image, corners, { onProgress, signal, isW
   const say = t => onProgress && onProgress(t);
   const stopIfAsked = () => { if (signal && signal.aborted) throw new LocalReadError('cancelled', 'Stopped.'); };
   say('Straightening the photo…'); await tick();
-  const board = warp(image, corners);
-  const { tiles } = findTiles(board);
-  if (tiles.size < 2) throw new LocalReadError('notiles', 'No tiles found. Check that the four corners sit on the corners of the 15 × 15 grid.');
-  say(`Found ${tiles.size} tiles. Reading letters…`); await tick();
+  const padded = warp(image, corners, PAD);
+  const found = findLetters(padded);
+  if (!found || found.blobs.length < 2) throw new LocalReadError('notiles', 'No tiles found. Check that the four corners sit on the corners of the 15 × 15 grid.');
+  say('Finding where each tile sits…'); await tick();
+  stopIfAsked();
+  const model = fitGrid(found.blobs);
+  const byBlob = assign(found.blobs, model);
+  const placed = [...byBlob].map(([bi, cell]) => Object.assign(found.blobs[bi], { cell }));
+  say(`Found ${placed.length} letters. Reading them…`); await tick();
   stopIfAsked();
   const fontT = getFontTemplates();
-  const idx = [...tiles];
-  const vecs = idx.map(i => tileVector(board, i));
-  let ranks = vecs.map(v => v && rank(v, fontT, null));
+  const vecs = placed.map(k => blobVector(found, k));
+  const fonts = vecs.map(v => fontScores(v, fontT));
+  let ranks = vecs.map((v, k) => rank(v, fonts[k], null));
   // two passes that learn this board's own letter shapes
   for (let pass = 0; pass < 2; pass++) {
     await tick(); stopIfAsked();
     const pt = photoTemplates(vecs, ranks);
-    ranks = vecs.map(v => v && rank(v, fontT, pt));
+    ranks = vecs.map((v, k) => rank(v, fonts[k], pt));
   }
   const cells = Array(N * N).fill('.'), conf = new Float32Array(N * N), alts = {};
-  const unsure = new Set();
-  idx.forEach((i, k) => {
-    const r = ranks[k];
-    if (!r) { unsure.add(i); return; }
+  const unsure = new Set(), letters = [];
+  placed.forEach((k, j) => {
+    const r = ranks[j], i = k.cell;
+    if (r[0].s < 0.35) return;                  // not a letter after all (a seam or a smudge)
+    letters.push(k);
     cells[i] = r[0].ch;
     const margin = r[0].s - r[1].s;
     conf[i] = Math.max(0, Math.min(100, margin * 400 + (r[0].s - 0.5) * 100));
     alts[i] = r.slice(1, 6).map(x => x.ch);
     if (r[0].s < 0.62 || margin < 0.05) unsure.add(i);
   });
+  const blanks = findBlanks(found, model, letters);
+  blanks.forEach(i => unsure.add(i));
   const fixed = isWord ? repairWithWords(cells, conf, alts, isWord) : [];
   fixed.forEach(i => unsure.add(i));
-  const blankish = idx.filter(i => cells[i] === '.').length;
   const rows = [];
   for (let r = 0; r < N; r++) rows.push(cells.slice(r * N, r * N + N).join(''));
   const notes = [];
   if (fixed.length) notes.push(`Corrected ${fixed.length} letter${fixed.length > 1 ? 's' : ''} using the word list.`);
-  if (blankish) notes.push(`${blankish} tile${blankish > 1 ? 's have' : ' has'} no readable letter (often a blank): type the letter it stands for and press ?.`);
-  return { rows, unsure: [...unsure].map(i => [(i / N) | 0, i % N]), note: notes.join(' '), board };
+  if (blanks.length) notes.push(`${blanks.length} tile${blanks.length > 1 ? 's have' : ' has'} no readable letter (often a blank): type the letter it stands for and press ?.`);
+  // show the straightened grid itself, without the margin
+  const board = document.createElement('canvas');
+  board.width = board.height = CELL * N;
+  board.getContext('2d').drawImage(padded, PAD * CELL, PAD * CELL, CELL * N, CELL * N, 0, 0, CELL * N, CELL * N);
+  return { rows, unsure: [...unsure].map(i => [(i / N) | 0, i % N]), note: notes.join(' '), board, blanks };
 }
 
 /* ---------- word-list repair ---------- */

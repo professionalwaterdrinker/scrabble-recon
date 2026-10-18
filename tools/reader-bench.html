@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reader Bench</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; background: #f4f4f2; color: #222; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  td, th { border: 1px solid #ccc; padding: 4px 8px; text-align: right; }
+  canvas, img { max-width: 360px; margin: 4px; border: 1px solid #999; }
+  pre { font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>On-device reader bench</h1>
+<p>Draws boards with tiles pushed off their squares, reads them with <code>js/localreader.js</code> and scores the result.
+Add <code>?show</code> to see the photos, or <code>?only=phone</code> to run some cases. Not part of the app.</p>
+<div id="out">Running…</div>
+<div id="pics"></div>
+<script type="module">
+import { readBoardLocally, squareToQuad } from '../js/localreader.js';
+
+const N = 15;
+const BOARDS = [
+  ['.V...ATT....NAE', '.I...GOOKY.CABS', '.GEL....HOMO...', '..HIST.LIDOS...', '....COMAs......', '..JNANA........', '....BERET.WEER.', '...V...ROPY....', '...OPINED.ET...', '.REDID.........', '.I.U...........', '.L.NA..........', '.L..G..........', '....A..........', '..WARn.........'],
+  ['....K.R.L......', '....ETA.I.I....', 'T.D.NOR.N.N....', 'O.I..PESO.T....', 'T.V.AS.C.QI....', 'ETAPE..U.U.....', 'MO.YO..BOA.....', '.I.ON.FADS.....', 'ET.I..E.ES.....', 'G..D..N.......L', 'ARM...CARBOY..I', 'L.AXE.E..AW...R', '..WIFED..RELIVE', '...............', '...............'],
+  ['..W..L.........', '..RAIA....R....', '..E..MM.GLUEY..', '..N..BO.L.G.OI.', '.....SORA.A....', '...A..TOD.T....', '...F...V.AE....', '...F..PEDS.....', '...E..ONES.....', '...CURT.P......', '...T..S.O......', '....LAY.NO.....', '...NIB.WED.....', 'AGREE..ADO.....', '.......N.R.....'],
+];
+
+// premium squares, as in the app
+const PREM = Array(N * N).fill('');
+{
+  const put = (list, t) => list.forEach(([r, c]) => {
+    for (const [a, b] of [[r, c], [c, r]]) for (const rr of [a, 14 - a]) for (const cc of [b, 14 - b]) PREM[rr * N + cc] = t;
+  });
+  put([[0,3],[2,6],[3,7],[6,6]], 'dl'); put([[1,5],[5,5]], 'tl'); put([[1,1],[2,2],[3,3],[4,4],[7,7]], 'dw'); put([[0,0],[0,7]], 'tw');
+}
+const VAL = { A:1,B:3,C:3,D:2,E:1,F:4,G:2,H:4,I:1,J:8,K:5,L:1,M:3,N:1,O:1,P:3,Q:10,R:1,S:1,T:1,U:1,V:4,W:4,X:8,Y:4,Z:10 };
+const STYLES = {
+  classic: { bg: '#2c5e47', sq: '#cddcc4', line: '#2c5e47', tw: '#d6503f', dw: '#eea59a', tl: '#3b78c4', dl: '#a9d1ea', label: '#1d2b24', face: [240, 222, 178], font: '700 SIZEpx "Segoe UI", sans-serif' },
+  wood:    { bg: '#8a5a2b', sq: '#e2c795', line: '#8a5a2b', tw: '#b5403a', dw: '#d88c76', tl: '#3f6fa6', dl: '#8fb6cf', label: '#3a2a18', face: [238, 220, 176], font: '700 SIZEpx Verdana, sans-serif' },
+  dark:    { bg: '#151515', sq: '#2b2b2b', line: '#111', tw: '#c8322f', dw: '#c56a7b', tl: '#2b63b5', dl: '#4b8fb8', label: '#e6e6e6', face: [236, 228, 214], font: '700 SIZEpx Tahoma, sans-serif' },
+};
+
+// a seeded random number generator, so every run draws the same boards
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+
+async function drawPhoto(rows, { shift, rot, cornerErr, style, seed, persp, res, jpeg }) {
+  const R = rng(seed), u = (a = 1) => (R() * 2 - 1) * a;
+  const S = 76, M = 90, W = S * N + M * 2, st = STYLES[style];
+  const cv = document.createElement('canvas'); cv.width = cv.height = W;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#7d6a55'; g.fillRect(0, 0, W, W);                      // table
+  g.fillStyle = st.bg; g.fillRect(M - 18, M - 18, S * N + 36, S * N + 36);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const p = PREM[r * N + c];
+    g.fillStyle = p ? st[p] : st.sq; g.fillRect(M + c * S + 2, M + r * S + 2, S - 4, S - 4);
+    if (p) {
+      g.fillStyle = st.label; g.font = `700 ${S * 0.16}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const words = { tw: ['TRIPLE', 'WORD', 'SCORE'], dw: ['DOUBLE', 'WORD', 'SCORE'], tl: ['TRIPLE', 'LETTER', 'SCORE'], dl: ['DOUBLE', 'LETTER', 'SCORE'] }[p];
+      words.forEach((w, k) => g.fillText(w, M + c * S + S / 2, M + r * S + S * (0.3 + k * 0.2)));
+    }
+  }
+  // shifts that run along rows and columns (a nudged word moves together) plus jitter per tile
+  const rowS = Array.from({ length: N }, () => [u(shift * 0.6), u(shift * 0.6)]);
+  const colS = Array.from({ length: N }, () => [u(shift * 0.6), u(shift * 0.6)]);
+  const T = S * 0.92;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const ch = rows[r][c]; if (ch === '.') continue;
+    const dx = (rowS[r][0] + colS[c][0] + u(shift * 0.5)) * S, dy = (rowS[r][1] + colS[c][1] + u(shift * 0.5)) * S;
+    g.save();
+    g.translate(M + c * S + S / 2 + dx, M + r * S + S / 2 + dy);
+    g.rotate(u(rot) * Math.PI / 180);
+    const k = 1 + u(0.05), f = st.face.map(v => Math.round(Math.min(255, v * k)));
+    g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 5; g.shadowOffsetX = 3; g.shadowOffsetY = 4;
+    g.fillStyle = `rgb(${f.map(v => v * 0.72 | 0)})`; g.beginPath(); g.roundRect(-T / 2, -T / 2, T, T + S * 0.05, S * 0.1); g.fill();
+    g.shadowColor = 'transparent';
+    g.fillStyle = `rgb(${f})`; g.beginPath(); g.roundRect(-T / 2, -T / 2, T, T, S * 0.1); g.fill();
+    if (ch !== ch.toLowerCase() || ch === ch.toUpperCase()) {
+      g.fillStyle = '#1b1b1b'; g.font = st.font.replace('SIZE', S * 0.58); g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(ch, -S * 0.05, S * 0.02);
+      g.font = `700 ${S * 0.2}px Arial`; g.fillText(String(VAL[ch]), T * 0.33, T * 0.3);
+    }
+    g.restore();
+  }
+  // uneven light, sensor noise and a little blur
+  const lg = g.createRadialGradient(W * (0.3 + R() * 0.4), W * (0.3 + R() * 0.4), W * 0.1, W / 2, W / 2, W * 0.8);
+  lg.addColorStop(0, 'rgba(255,255,255,0.10)'); lg.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.fillStyle = lg; g.fillRect(0, 0, W, W);
+  const img = g.getImageData(0, 0, W, W), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const n = u(10); d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(img, 0, 0);
+  const out = document.createElement('canvas'); out.width = out.height = W;
+  const o = out.getContext('2d'); o.filter = 'blur(0.7px)'; o.drawImage(cv, 0, 0);
+  // corners placed by hand: a little off the true grid corners
+  const e = () => u(cornerErr * S);
+  const a = M, b = M + S * N;
+  let corners = [[a, a], [b, a], [b, b], [a, b]];
+  let photo = out;
+  if (persp || res) photo = await camera(out, corners, persp || 0, res || W, R);
+  corners = photo.corners || corners;
+  photo = photo.canvas || photo;
+  if (jpeg) photo = await recompress(photo, jpeg);
+  return { photo, corners: corners.map(([x, y]) => [x + e(), y + e()]) };
+}
+
+// Look at the flat drawing through a tilted camera: each photo pixel samples the
+// drawing through a homography, and the board corners are found by inverting it.
+async function camera(flat, corners, persp, res, R) {
+  const W = flat.width, k = persp * W;
+  // where the photo's corners land in the drawing: the far edge looks narrower
+  const q = [[-k * (0.6 + R() * 0.4), -k * 0.3], [W + k * (0.6 + R() * 0.4), -k * 0.3], [W - k * 0.2 * R(), W + k * 0.1], [k * 0.2 * R(), W + k * 0.1]];
+  const map = squareToQuad(q);
+  const fd = flat.getContext('2d').getImageData(0, 0, W, W).data;
+  const cv = document.createElement('canvas'); cv.width = cv.height = res;
+  const g = cv.getContext('2d'), img = g.createImageData(res, res), d = img.data;
+  for (let y = 0; y < res; y++) for (let x = 0; x < res; x++) {
+    const [sx, sy] = map((x + 0.5) / res, (y + 0.5) / res);
+    const ix = Math.max(0, Math.min(W - 1, sx | 0)), iy = Math.max(0, Math.min(W - 1, sy | 0)), i = (iy * W + ix) * 4, o = (y * res + x) * 4;
+    d[o] = fd[i]; d[o + 1] = fd[i + 1]; d[o + 2] = fd[i + 2]; d[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  // invert the map for each board corner (Newton steps with a numerical Jacobian)
+  const inv = ([tx, ty]) => {
+    let u = 0.5, v = 0.5;
+    for (let it = 0; it < 30; it++) {
+      const [x, y] = map(u, v), h = 1e-4, [xu, yu] = map(u + h, v), [xv, yv] = map(u, v + h);
+      const a = (xu - x) / h, b = (xv - x) / h, c = (yu - y) / h, dd = (yv - y) / h, det = a * dd - b * c;
+      const ex = tx - x, ey = ty - y; u += (dd * ex - b * ey) / det; v += (-c * ex + a * ey) / det;
+    }
+    return [u * res, v * res];
+  };
+  return { canvas: cv, corners: corners.map(inv) };
+}
+
+async function recompress(cv, quality) {
+  const img = new Image(); img.src = cv.toDataURL('image/jpeg', quality); await img.decode();
+  const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height;
+  out.getContext('2d').drawImage(img, 0, 0); return out;
+}
+
+function score(truth, got) {
+  let tiles = 0, found = 0, right = 0, extra = 0;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const t = truth[r][c], g = got[r][c];
+    if (t === '.') { if (g !== '.') extra++; continue; }
+    if (t === t.toLowerCase()) continue;          // blanks carry no letter to read
+    tiles++; if (g !== '.') found++; if (g === t) right++;
+  }
+  return { tiles, found, right, extra };
+}
+
+const words = new Set((await (await fetch('../data/words.txt')).text()).split(/\r?\n/).map(w => w.trim().toUpperCase()).filter(Boolean));
+const show = location.search.includes('show');
+const ONLY = new URLSearchParams(location.search).get('only');
+const SCEN_ALL = [
+  { name: 'aligned', shift: 0, rot: 0, cornerErr: 0.05 },
+  { name: 'slight', shift: 0.08, rot: 2, cornerErr: 0.12 },
+  { name: 'moderate', shift: 0.16, rot: 4, cornerErr: 0.2 },
+  { name: 'messy', shift: 0.25, rot: 7, cornerErr: 0.3 },
+  { name: 'phone', shift: 0.14, rot: 4, cornerErr: 0.2, persp: 0.12, res: 1000, jpeg: 0.7 },
+  { name: 'phone, messy', shift: 0.22, rot: 6, cornerErr: 0.25, persp: 0.15, res: 900, jpeg: 0.6 },
+];
+const SCEN = ONLY ? SCEN_ALL.filter(s => s.name.startsWith(ONLY)) : SCEN_ALL;
+const results = [];
+let html = '<table><tr><th>case</th><th>style</th><th>tiles found</th><th>letters right (raw)</th><th>letters right (with words)</th><th>false tiles</th><th>ms per read</th></tr>';
+for (const sc of SCEN) for (const style of Object.keys(STYLES)) {
+  const tot = { tiles: 0, found: 0, raw: 0, right: 0, extra: 0, ms: 0 };
+  for (let b = 0; b < BOARDS.length; b++) {
+    const { photo, corners } = await drawPhoto(BOARDS[b], { ...sc, style, seed: 11 + b * 7 + sc.shift * 1000 });
+    if (show && b === 0) document.getElementById('pics').append(photo);
+    const t0 = performance.now(); const raw = await readBoardLocally(photo, corners, {}); tot.ms += performance.now() - t0;
+    const rep = await readBoardLocally(photo, corners, { isWord: w => words.has(w) });
+    const s1 = score(BOARDS[b], raw.rows), s2 = score(BOARDS[b], rep.rows);
+    tot.tiles += s1.tiles; tot.found += s1.found; tot.raw += s1.right; tot.right += s2.right; tot.extra += s2.extra;
+  }
+  const pc = x => (100 * x / tot.tiles).toFixed(1) + '%';
+  results.push({ case: sc.name, style, found: pc(tot.found), raw: pc(tot.raw), right: pc(tot.right), extra: tot.extra, ms: Math.round(tot.ms / BOARDS.length) });
+  html += `<tr><td>${sc.name}</td><td>${style}</td><td>${pc(tot.found)}</td><td>${pc(tot.raw)}</td><td>${pc(tot.right)}</td><td>${tot.extra}</td><td>${Math.round(tot.ms / BOARDS.length)}</td></tr>`;
+}
+document.getElementById('out').innerHTML = html + '</table>';
+window.bench = { drawPhoto, BOARDS, SCEN_ALL, words };   // for poking at single cases from the console
+window.benchResults = results;
+</script>
+</body>
+</html>
