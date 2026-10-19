@@ -111,7 +111,7 @@ export function createStudy(ctx) {
         return `<button type="button" class="st-list" data-list="${l.id}">
           <span class="st-list-title">${l.title}</span>
           <span class="st-list-blurb">${l.blurb}</span>
-          <span class="st-list-foot"><span>${plural(ids.length, l.id === 'hooks2' ? 'word' : l.id === 'stems' ? 'stem' : 'card')}</span>${added ? `<span class="st-tag">${p.learned} learned</span>` : ''}</span>
+          <span class="st-list-foot"><span>${plural(ids.length, l.group === 'Hooks' ? 'word' : l.id === 'stems' ? 'stem' : 'card')}</span>${added ? `<span class="st-tag">${p.learned} learned</span>` : ''}</span>
           ${added ? progress(p.learned, p.total) : ''}
         </button>`;
       }).join('')}</div></section>`).join('')}`);

@@ -120,7 +120,26 @@ export const LISTS = [
     order: 'alphabetical order',
     build: ix => [...ix.set].filter(w => w.length === 2).sort().map(w => ({ kind: 'hook', prompt: w })),
   },
+  {
+    id: 'hooks3', title: 'Hooks on the threes', group: 'Hooks',
+    blurb: 'The letters that go in front of or after each three-letter word.',
+    order: 'probability: #1 is the likeliest to be drawn',
+    build: ix => hookCards(ix, 3),
+  },
+  {
+    id: 'hooks4', title: 'Hooks on the fours', group: 'Hooks',
+    blurb: 'Front and back hooks for every four-letter word, the likeliest first.',
+    order: 'probability: #1 is the likeliest to be drawn',
+    build: ix => hookCards(ix, 4),
+  },
 ];
+// Every word of a length as a hook card, most likely to be drawn first. Words that take
+// no hooks stay in: knowing a word can't be extended is part of learning hooks.
+function hookCards(ix, n) {
+  return [...ix.set].filter(w => w.length === n)
+    .sort((a, b) => probability(alphagram(b)) - probability(alphagram(a)) || (a < b ? -1 : 1))
+    .map(w => ({ kind: 'hook', prompt: w }));
+}
 
 // The answers to a card under this word list.
 export function answersFor(index, card) {

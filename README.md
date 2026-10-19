@@ -186,7 +186,7 @@ The **Study** tab is for learning words, in the spirit of Aerolith's Wordwalls a
 - **Must-know:** two-letter words, three-letter words and short J, Q, X and Z words.
 - **Bingos:** the 500 most likely seven- and eight-letter words (by how often their tiles are drawn) and the best six-letter bingo stems.
 - **Specialty:** vowel-heavy words and Q without U.
-- **Hooks:** the letters that go before and after each two-letter word.
+- **Hooks:** the letters that go before and after each two-, three- and four-letter word (the threes and fours most likely first).
 
 Each card shows the letters as tiles with a cue such as "3 words", and a number (#1, #2…) in the list's order: probability for most lists, so #1 is the likeliest rack to draw. To **practise** part of a list, choose a range of those numbers with the two-handled slider or by typing them (for example #1 to #50), and optionally shuffle them. Each list remembers its range. Faint letters either side of a word are its hooks. **Hide answers** turns a list into a self-quiz, and tapping a word shows its definition. Definitions come from [Wiktionary](https://en.wiktionary.org/) (CC BY-SA). They're fetched only when you open a word, sending just that word to Wiktionary, and then saved on your device.
 
